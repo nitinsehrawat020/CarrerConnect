@@ -6,6 +6,7 @@ import { OctagonAlertIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { FaGoogle, FaGithub } from "react-icons/fa";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const formSchema = z
   .object({
@@ -35,9 +36,9 @@ const formSchema = z
   });
 
 const SignUpView = () => {
-  const router = useRouter();
   const [error, seterror] = useState<string | null>(null);
   const [pending, setPending] = useState<boolean>(false);
+  const router = useRouter();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -61,6 +62,25 @@ const SignUpView = () => {
         onSuccess: () => {
           setPending(false);
           router.push("/");
+        },
+        onError: ({ error }) => {
+          seterror(error.message);
+        },
+      }
+    );
+  };
+  const onSocial = (provider: "google" | "github") => {
+    seterror(null);
+    setPending(true);
+
+    authClient.signIn.social(
+      {
+        provider: provider,
+        callbackURL: "/",
+      },
+      {
+        onSuccess: () => {
+          setPending(false);
         },
         onError: ({ error }) => {
           seterror(error.message);
@@ -128,7 +148,7 @@ const SignUpView = () => {
                         <FormLabel>Password</FormLabel>
                         <FormControl>
                           <Input
-                            type="pasword"
+                            type="password"
                             placeholder="********"
                             {...field}
                           />
@@ -172,13 +192,21 @@ const SignUpView = () => {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Button variant="outline" type="button" className="w-full">
-                    {" "}
-                    Google
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="w-full"
+                    onClick={() => onSocial("google")}
+                  >
+                    <FaGoogle /> Google
                   </Button>
-                  <Button variant="outline" type="button" className="w-full">
-                    {" "}
-                    Github
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="w-full"
+                    onClick={() => onSocial("github")}
+                  >
+                    <FaGithub /> Github
                   </Button>
                 </div>
                 <div className="text-center text-sm">
@@ -187,7 +215,6 @@ const SignUpView = () => {
                     href="/sign-in"
                     className="underline underline-offset-4"
                   >
-                    {" "}
                     Sign In
                   </Link>
                 </div>
