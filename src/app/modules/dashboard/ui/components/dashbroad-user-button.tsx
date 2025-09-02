@@ -46,23 +46,25 @@ const DashbroadUserButton = () => {
           asChild
           className="rounded-lg border border-border/10 p-3 w-full flex items-center justify-between bg-white/5 hover:bg-white/10 overflow-hidden"
         >
-          {data.user.image ? (
-            <Avatar>
-              <AvatarImage src={data.user.image} />
-            </Avatar>
-          ) : (
-            <GeneratedAvatar
-              seed={data.user.name}
-              varient="initials"
-              className="size-9 mr-3"
-            />
-          )}
+          <div className="rounded-lg border border-border/10 p-3 w-full flex items-center justify-between bg-white/5 hover:bg-white/10 overflow-hidden">
+            {data.user.image ? (
+              <Avatar>
+                <AvatarImage src={data.user.image} />
+              </Avatar>
+            ) : (
+              <GeneratedAvatar
+                seed={data.user.name}
+                varient="initials"
+                className="size-9 mr-3"
+              />
+            )}
 
-          <div className="flex flex-col gap-0.5 text-left overflow-hiddenflex-1 min-w-0">
-            <p className="text-sm truncate w-full ">{data.user.name}</p>
-            <p className="text-xs truncate w-full ">{data.user.email}</p>
+            <div className="flex flex-col gap-0.5 text-left overflow-hiddenflex-1 min-w-0">
+              <p className="text-sm truncate w-full ">{data.user.name}</p>
+              <p className="text-xs truncate w-full ">{data.user.email}</p>
+            </div>
+            <ChevronDown className="size-4 shirnk-0" />
           </div>
-          <ChevronDown className="size-4 shirnk-0" />
         </DrawerTrigger>
         <DrawerContent>
           <DrawerHeader>
