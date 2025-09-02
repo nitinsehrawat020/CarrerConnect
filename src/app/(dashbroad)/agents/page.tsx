@@ -40,7 +40,7 @@ const page = async () => {
               />
             }
           >
-            <AgentsView />;
+            <AgentsView />
           </ErrorBoundary>
         </Suspense>
       </HydrationBoundary>
