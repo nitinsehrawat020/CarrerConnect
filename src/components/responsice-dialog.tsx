@@ -26,7 +26,7 @@ interface ResponsiveDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const ResponsiceDialog = ({
+const ResponsiveDialog = ({
   title,
   description,
   children,
@@ -61,4 +61,4 @@ const ResponsiceDialog = ({
     </Dialog>
   );
 };
-export default ResponsiceDialog;
+export default ResponsiveDialog;
