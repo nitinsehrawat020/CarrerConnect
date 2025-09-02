@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  onRowClick: (row: TData) => void;
+  onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData, TValue>({
