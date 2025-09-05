@@ -3,7 +3,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { columns } from "../components/columns";
-import { EmptyState } from "../components/error-state";
+import { EmptyState } from "../../../../../components/empty-state";
 import { useAgentsFilter } from "../../hooks/use-agents-filter";
 import { DataPagination } from "../components/data-pagination";
 import { useRouter } from "next/navigation";
