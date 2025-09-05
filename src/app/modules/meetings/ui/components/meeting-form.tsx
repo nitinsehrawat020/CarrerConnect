@@ -155,6 +155,7 @@ const MeetingForm = ({
                   Not found what you&apos;re looking for ?{" "}
                   <Button
                     type="button"
+                    variant={"outline"}
                     className="text-primary hover:underline"
                     onClick={() => setOpenNewAgentDialog(true)}
                   >
