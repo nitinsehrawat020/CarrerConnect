@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db-push": "drizzle-kit push",
-    "db-studio": "drizzle-kit studio"
+    "db-studio": "drizzle-kit studio",
+    "dev-webhook": "ngrok http --url=fine-whippet-physically.ngrok-free.app 3000"
   },
   "dependencies": {
     "@dicebear/collection": "^9.2.4",
@@ -42,6 +43,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@stream-io/node-sdk": "^0.6.5",
+    "@stream-io/openai-realtime-api": "^0.3.3",
     "@stream-io/video-react-sdk": "^1.20.2",
     "@tanstack/react-query": "^5.76.1",
     "@tanstack/react-table": "^8.21.3",
@@ -58,6 +60,7 @@
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.43.1",
     "embla-carousel-react": "^8.6.0",
+    "groq-sdk": "^0.32.0",
     "humanize-duration": "^3.33.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.542.0",
