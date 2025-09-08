@@ -38,7 +38,7 @@ export const MeetingIdView = ({ meetingId }: Props) => {
       onSuccess: () => {
         queryClient.invalidateQueries(trpc.meetings.getMany.queryOptions({}));
 
-        router.push("/meeting");
+        router.push("/meetings");
       },
     })
   );
