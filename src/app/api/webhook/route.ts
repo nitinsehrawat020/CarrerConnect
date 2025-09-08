@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     const meetingId = event.call_cid.split(":")[1];
     await db
       .update(meetings)
-      .set({ transcribleUrl: event.call_recording.url })
+      .set({ recordingUrl: event.call_recording.url })
       .where(eq(meetings.id, meetingId))
       .returning();
   }
