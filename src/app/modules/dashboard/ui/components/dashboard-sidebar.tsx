@@ -18,6 +18,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DashbroadUserButton from "./dashbroad-user-button";
+import { DashboardTrail } from "./dashboard-trail";
 
 const firstSection = [
   { icon: VideoIcon, label: "Meetings", href: "/meetings" },
@@ -97,6 +98,7 @@ const DashboardSidebar = () => {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="text-white">
+        <DashboardTrail />
         <DashbroadUserButton />
       </SidebarFooter>
     </Sidebar>
