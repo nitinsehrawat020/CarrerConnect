@@ -45,7 +45,7 @@ export const Transcript = ({ meetingId }: Props) => {
 
             return (
               <div
-                className="flex flex-col gap-y-2 hober:bg-muted p-4 rounded-md border"
+                className="flex flex-col gap-y-2 hover:bg-muted p-4 rounded-md border"
                 key={item.start_ts}
               >
                 <div className="flex gap-x-2  items-center">
@@ -53,7 +53,7 @@ export const Transcript = ({ meetingId }: Props) => {
                     <AvatarImage
                       alt="User Avatar"
                       src={
-                        item.user.image ??
+                        ("image" in item.user ? item.user.image : undefined) ??
                         generateAvatarUri({
                           seed: item.user.name,
                           variant: "initials",

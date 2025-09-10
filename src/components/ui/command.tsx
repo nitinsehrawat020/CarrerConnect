@@ -42,7 +42,7 @@ function CommandDialog({
   description?: string;
   className?: string;
   showCloseButton?: boolean;
-  shouldFilter: boolean;
+  shouldFilter?: boolean;
 }) {
   return (
     <Dialog {...props}>
