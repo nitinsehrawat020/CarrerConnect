@@ -138,7 +138,7 @@ export const resumeRouter = createTRPCRouter({
         ...getTableColumns(resume),
       })
       .from(resume)
-      .where(eq(resume.id, ctx.auth.user.id))
+      .where(eq(resume.userId, ctx.auth.user.id))
       .orderBy(desc(resume.createAt));
     return data;
   }),

@@ -129,7 +129,7 @@ export const resume = pgTable("resume", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => nanoid()),
-  companyName: text("comapnyName").notNull(),
+  companyName: text("companyName").notNull(),
   jobTitle: text("jobTitle").notNull(),
   imagePath: text("imagePath"),
   jobDescription: text("jobDescription").notNull(),
