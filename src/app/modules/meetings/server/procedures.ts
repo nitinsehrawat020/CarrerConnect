@@ -267,7 +267,6 @@ export const meetingsRouter = createTRPCRouter({
           message: "meeting not found",
         });
       }
-      return existingMeeting;
     }),
   getMany: protectedProcedure
     .input(

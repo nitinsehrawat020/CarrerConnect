@@ -54,7 +54,6 @@ export const CallLobby = ({ onJoin }: Props) => {
   const { hasBrowserPermission: hasCameraPermission } = useCameraState();
 
   const hasBrowserMediaPermission = hasCameraPermission && hasMicPermission;
-  console.log(hasBrowserMediaPermission);
 
   return (
     <div className="flex flex-col items-center justify-center h-full bg-radial from-sidebar-accent to-sidebar">
