@@ -7,10 +7,10 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
-const page = () => {
+const page = async () => {
   const queryClient = getQueryClient();
 
-  void queryClient.prefetchQuery(trpc.resume.getMany.queryOptions());
+  await queryClient.prefetchQuery(trpc.resume.getMany.queryOptions());
   return (
     <>
       <ResumeHeaderList />

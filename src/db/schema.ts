@@ -123,11 +123,14 @@ export type FeedbackJSON = {
 };
 
 export const resume = pgTable("resume", {
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   id: text("id")
     .primaryKey()
     .$defaultFn(() => nanoid()),
   companyName: text("comapnyName").notNull(),
-  jobTitle: text("jonTitle").notNull(),
+  jobTitle: text("jobTitle").notNull(),
   imagePath: text("imagePath"),
   jobDescription: text("jobDescription").notNull(),
   resumePath: text("resumePath").notNull(),

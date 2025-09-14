@@ -13,7 +13,7 @@ interface Props {
   params: Promise<{ resumeId: string }>;
 }
 
-const MeetingIdPage = async ({ params }: Props) => {
+const ResumeIdPage = async ({ params }: Props) => {
   const { resumeId } = await params;
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -23,7 +23,7 @@ const MeetingIdPage = async ({ params }: Props) => {
   }
 
   const queryClient = getQueryClient();
-  void queryClient.prefetchQuery(
+  await queryClient.prefetchQuery(
     trpc.resume.getOne.queryOptions({ id: resumeId })
   );
 
@@ -52,4 +52,4 @@ const MeetingIdPage = async ({ params }: Props) => {
   );
 };
 
-export default MeetingIdPage;
+export default ResumeIdPage;

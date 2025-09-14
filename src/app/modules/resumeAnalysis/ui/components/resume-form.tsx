@@ -28,6 +28,9 @@ import { toast } from "sonner";
 import GeneratedAvatar from "@/components/generated-avatar";
 import { convertPdfToImage } from "@/lib/pdf2png";
 
+// Maximum PDF file size: 10MB
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
 interface ResumeFormProps {
   onSucces?: () => void;
   onCancel?: () => void;
@@ -49,54 +52,76 @@ export const ResumeForm = ({ onSucces, onCancel }: ResumeFormProps) => {
     async (acceptedFiles: File[]) => {
       const file = acceptedFiles?.[0];
       if (!file) return;
+
       if (file.type !== "application/pdf") {
         toast.error("Please upload a PDF file.");
         return;
       }
-      const imageFile = await convertPdfToImage(file);
-      console.log(imageFile);
 
-      // Convert File -> base64 data URL
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = (e) => reject(e);
-        reader.readAsDataURL(file);
-      });
-      const comma = dataUrl.indexOf(",");
-      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      // Check file size before processing
+      if (file.size > MAX_PDF_BYTES) {
+        toast.error(
+          `File size too large. Maximum allowed size is ${Math.round(
+            MAX_PDF_BYTES / (1024 * 1024)
+          )}MB.`
+        );
+        return;
+      }
 
-      // Set schema-compatible object variant for PDF
-      form.setValue(
-        "file",
-        {
-          type: "application/pdf",
-          base64,
-          name: file.name,
-        } as z.infer<typeof serverCreateSchema>["file"],
-        { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-      );
+      try {
+        const imageFile = await convertPdfToImage(file);
+        console.log(imageFile);
 
-      // Convert PNG File to base64 for image field if conversion succeeded
-      if (imageFile.file) {
-        const imageDataUrl = await new Promise<string>((resolve, reject) => {
+        // Convert File -> base64 data URL
+        const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = (e) => reject(e);
-          reader.readAsDataURL(imageFile.file!);
+          reader.readAsDataURL(file);
         });
+        const comma = dataUrl.indexOf(",");
+        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
 
-        form.setValue("image", imageDataUrl, {
-          shouldDirty: true,
-          shouldTouch: true,
-          shouldValidate: true,
-        });
-      } else {
-        console.warn("Image conversion failed:", imageFile.error);
+        // Set schema-compatible object variant for PDF
+        form.setValue(
+          "file",
+          {
+            type: "application/pdf",
+            base64,
+            name: file.name,
+          } as z.infer<typeof serverCreateSchema>["file"],
+          { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+        );
+
+        // Convert PNG File to base64 for image field if conversion succeeded
+        if (imageFile.file) {
+          const imageDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(imageFile.file!);
+          });
+
+          form.setValue("image", imageDataUrl, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          });
+        } else {
+          console.warn("Image conversion failed:", imageFile.error);
+          toast.error(
+            "Failed to convert PDF to image. Please try again or use a different file."
+          );
+          return;
+        }
+
+        setSelectedFileName(file.name);
+        await form.trigger("file");
+        await form.trigger("image");
+      } catch (error) {
+        console.error("Error processing PDF file:", error);
+        toast.error("Failed to process PDF file. Please try again.");
       }
-      setSelectedFileName(file.name);
-      await form.trigger("file");
-      await form.trigger("image");
     },
     [form]
   );

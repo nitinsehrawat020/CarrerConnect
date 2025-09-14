@@ -14,10 +14,18 @@ async function loadPdfJs(): Promise<any> {
   if (pdfjsLib) return pdfjsLib;
   if (loadPromise) return loadPromise;
 
+  // Ensure we're in a client environment
+  if (typeof window === "undefined") {
+    throw new Error("PDF.js can only be loaded in browser environment");
+  }
+
   loadPromise = import("pdfjs-dist")
     .then((lib) => {
       // Set the worker source to match the installed version 5.3.93
-      lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.3.93/build/pdf.worker.min.mjs`;
+      // Using unpkg CDN for compatibility with Next.js 15/Turbopack
+      if (!lib.GlobalWorkerOptions.workerSrc) {
+        lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.3.93/build/pdf.worker.min.mjs`;
+      }
       pdfjsLib = lib;
       return lib;
     })
@@ -110,30 +118,29 @@ export async function convertPdfToImage(
     await page.render({ canvasContext: context, viewport }).promise;
 
     return new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            // Create a File from the blob with the same name as the pdf
-            const originalName = file.name.replace(/\.pdf$/i, "");
-            const imageFile = new File([blob], `${originalName}.png`, {
-              type: "image/png",
-            });
+      canvas.toBlob((blob) => {
+        try {
+          page.cleanup?.();
+        } catch {}
+        if (blob) {
+          // Create a File from the blob with the same name as the pdf
+          const originalName = file.name.replace(/\.pdf$/i, "");
+          const imageFile = new File([blob], `${originalName}.png`, {
+            type: "image/png",
+          });
 
-            resolve({
-              imageUrl: URL.createObjectURL(blob),
-              file: imageFile,
-            });
-          } else {
-            resolve({
-              imageUrl: "",
-              file: null,
-              error: "Failed to create image blob",
-            });
-          }
-        },
-        "image/png",
-        0.9 // Slightly reduced quality for better performance
-      );
+          resolve({
+            imageUrl: URL.createObjectURL(blob),
+            file: imageFile,
+          });
+        } else {
+          resolve({
+            imageUrl: "",
+            file: null,
+            error: "Failed to create image blob",
+          });
+        }
+      }, "image/png");
     });
   } catch (err) {
     console.error("PDF conversion error:", err);
