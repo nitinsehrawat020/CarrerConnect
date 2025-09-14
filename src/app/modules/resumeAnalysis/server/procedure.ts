@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { resume } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import { eq, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import z from "zod";
 import { serverCreateSchema } from "../schema";
 import { put } from "@vercel/blob";
@@ -63,21 +63,26 @@ async function uploadImageToBlob(buffer: Buffer, filename: string) {
 export const resumeRouter = createTRPCRouter({
   create: protectedProcedure
     .input(serverCreateSchema)
-    .mutation(async ({ input, ctx }) => {
-      console.log(input);
-
+    .mutation(async ({ ctx, input }) => {
       // Extract PDF from input and convert to buffer
       const base64 = extractPdfBase64(input.file);
       const pdfBuffer = Buffer.from(base64, "base64");
 
-      // Generate user-specific filename
-      const userSlug = (ctx.auth.user.name || "user")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      const pdfFileName = `resumes/${userSlug}-${Math.random()
-        .toString(36)
-        .slice(2)}.pdf`;
+      const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+      if (pdfBuffer.byteLength > MAX_BYTES) {
+        throw new TRPCError({
+          code: "PAYLOAD_TOO_LARGE",
+          message: "PDF exceeds 10MB limit",
+        });
+      }
+      if (pdfBuffer.subarray(0, 4).toString("ascii") !== "%PDF") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid PDF file",
+        });
+      }
+
+      const pdfFileName = `resumes/${crypto.randomUUID()}.pdf`;
 
       // Upload PDF to Vercel Blob
       const pdfUrl = await uploadToVercelBlob(pdfBuffer, pdfFileName);
@@ -89,9 +94,7 @@ export const resumeRouter = createTRPCRouter({
         const imageBase64 = extractImageBase64(input.image);
         if (imageBase64) {
           const imageBuffer = Buffer.from(imageBase64, "base64");
-          const imageFileName = `images/${userSlug}-${Math.random()
-            .toString(36)
-            .slice(2)}.png`;
+          const imageFileName = `images/${crypto.randomUUID()}.png`;
 
           imageUrl = await uploadImageToBlob(imageBuffer, imageFileName);
         }
@@ -101,6 +104,7 @@ export const resumeRouter = createTRPCRouter({
       const [createdResume] = await db
         .insert(resume)
         .values({
+          userId: ctx.auth.user.id,
           companyName: input.companyName,
           jobTitle: input.jobTitle,
           jobDescription: input.jobDescription,
@@ -112,11 +116,13 @@ export const resumeRouter = createTRPCRouter({
     }),
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const [resumeData] = await db
         .select({ ...getTableColumns(resume) })
         .from(resume)
-        .where(eq(resume.id, input.id));
+        .where(
+          and(eq(resume.id, input.id), eq(resume.userId, ctx.auth.user.id))
+        );
 
       if (!resumeData) {
         throw new TRPCError({
@@ -126,13 +132,14 @@ export const resumeRouter = createTRPCRouter({
       }
       return resumeData;
     }),
-  getMany: protectedProcedure.query(async () => {
+  getMany: protectedProcedure.query(async ({ ctx }) => {
     const data = await db
       .select({
         ...getTableColumns(resume),
       })
-      .from(resume);
-
+      .from(resume)
+      .where(eq(resume.userId, ctx.auth.user.id))
+      .orderBy(desc(resume.createAt));
     return data;
   }),
 });

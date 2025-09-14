@@ -3,7 +3,7 @@
 import { ColumnDef } from "@tanstack/react-table";
 import { ResumeGetMany } from "../../types";
 import { CornerDownRightIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 const scoreColor = (score?: number) => {
   if (typeof score !== "number") return "bg-gray-100 text-gray-500";
@@ -34,7 +34,7 @@ export const columns: ColumnDef<ResumeGetMany[number]>[] = [
 
           <span className="text-sm text-muted-foreground">
             {row.original.createAt
-              ? format(row.original.createAt, "MMM d")
+              ? format(parseISO(row.original.createAt), "MMM d")
               : ""}
           </span>
         </div>

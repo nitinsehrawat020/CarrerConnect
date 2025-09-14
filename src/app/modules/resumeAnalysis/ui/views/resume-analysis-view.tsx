@@ -16,15 +16,16 @@ export const ResumeAnalysisView = () => {
 
   return (
     <div className=" flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4">
-      <DataTable
-        data={resumes}
-        columns={columns}
-        onRowClick={(row) => router.push(`/resumeAnalysis/${row.id}`)}
-      />
-      {resumes.length === 0 && (
+      {resumes.length > 0 ? (
+        <DataTable
+          data={resumes}
+          columns={columns}
+          onRowClick={(row) => router.push(`/resumeAnalysis/${row.id}`)}
+        />
+      ) : (
         <EmptyState
           title="Get your first analysis by agent"
-          description="Upload your reumne and your job title and description to know what your ATS and how you can improve it."
+          description="Upload your resume, job title, and description to get your ATS score and improvement tips."
         />
       )}
     </div>
