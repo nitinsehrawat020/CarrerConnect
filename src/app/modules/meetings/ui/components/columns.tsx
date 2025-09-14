@@ -15,7 +15,6 @@ import { cn, formatDuration } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 import { format } from "date-fns";
-import humanizeDuration from "humanize-duration";
 
 const statusIconMap = {
   upcoming: ClockArrowUpIcon,

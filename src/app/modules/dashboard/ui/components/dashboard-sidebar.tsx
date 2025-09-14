@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { BotIcon, StarIcon, VideoIcon } from "lucide-react";
+import { BotIcon, StarIcon, VideoIcon, FileUser } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,6 +23,7 @@ import { DashboardTrail } from "./dashboard-trail";
 const firstSection = [
   { icon: VideoIcon, label: "Meetings", href: "/meetings" },
   { icon: BotIcon, label: "Agents", href: "/agents" },
+  { icon: FileUser, label: "Resume Analysis", href: "/resumeAnalysis" },
 ];
 const secondSection = [{ icon: StarIcon, label: "Upgrade", href: "/upgrade" }];
 

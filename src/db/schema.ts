@@ -1,5 +1,12 @@
 import { nanoid } from "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  pgEnum,
+  jsonb,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -99,6 +106,32 @@ export const meetings = pgTable("meetings", {
   transcribleUrl: text("transcriptUrl"),
   recordingUrl: text("recordingUrl"),
   summary: text("summary"),
+  createAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+type TipBase = { type: "good" | "improve"; tip: string };
+type ExplTip = TipBase & { explanation: string };
+
+export type FeedbackJSON = {
+  overallScore: number;
+  ATS: { score: number; tips: TipBase[] };
+  toneAndStyle: { score: number; tips: ExplTip[] };
+  content: { score: number; tips: ExplTip[] };
+  structure: { score: number; tips: ExplTip[] };
+  skills: { score: number; tips: ExplTip[] };
+};
+
+export const resume = pgTable("resume", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  companyName: text("comapnyName").notNull(),
+  jobTitle: text("jonTitle").notNull(),
+  imagePath: text("imagePath"),
+  jobDescription: text("jobDescription").notNull(),
+  resumePath: text("resumePath").notNull(),
+  feedback: jsonb("feedback").$type<FeedbackJSON>(),
   createAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
