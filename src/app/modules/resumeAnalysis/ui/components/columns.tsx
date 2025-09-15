@@ -2,8 +2,15 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { ResumeGetMany } from "../../types";
-import { CornerDownRightIcon } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import {
+  CornerDownRightIcon,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Upload,
+  Loader2,
+} from "lucide-react";
+import { format } from "date-fns";
 
 const scoreColor = (score?: number) => {
   if (typeof score !== "number") return "bg-gray-100 text-gray-500";
@@ -12,6 +19,53 @@ const scoreColor = (score?: number) => {
   if (score >= 70) return "bg-gray-100 text-gray-800";
   if (score >= 60) return "bg-rose-100 text-rose-800";
   return "bg-rose-100 text-rose-800";
+};
+
+const StatusIndicator = ({ status }: { status: string }) => {
+  switch (status) {
+    case "uploading":
+      return (
+        <div className="flex items-center gap-2 text-blue-600">
+          <Upload className="size-4" />
+          <span className="text-sm font-medium">Uploading</span>
+        </div>
+      );
+    case "converting":
+      return (
+        <div className="flex items-center gap-2 text-orange-600">
+          <Loader2 className="size-4 animate-spin" />
+          <span className="text-sm font-medium">Converting</span>
+        </div>
+      );
+    case "analyzing":
+      return (
+        <div className="flex items-center gap-2 text-purple-600">
+          <Loader2 className="size-4 animate-spin" />
+          <span className="text-sm font-medium">Analyzing</span>
+        </div>
+      );
+    case "completed":
+      return (
+        <div className="flex items-center gap-2 text-green-600">
+          <CheckCircle className="size-4" />
+          <span className="text-sm font-medium">Completed</span>
+        </div>
+      );
+    case "failed":
+      return (
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertCircle className="size-4" />
+          <span className="text-sm font-medium">Failed</span>
+        </div>
+      );
+    default:
+      return (
+        <div className="flex items-center gap-2 text-gray-600">
+          <Clock className="size-4" />
+          <span className="text-sm font-medium">Pending</span>
+        </div>
+      );
+  }
 };
 
 export const columns: ColumnDef<ResumeGetMany[number]>[] = [
@@ -34,7 +88,7 @@ export const columns: ColumnDef<ResumeGetMany[number]>[] = [
 
           <span className="text-sm text-muted-foreground">
             {row.original.createAt
-              ? format(parseISO(row.original.createAt), "MMM d")
+              ? format(row.original.createAt, "MMM d")
               : ""}
           </span>
         </div>
@@ -42,12 +96,23 @@ export const columns: ColumnDef<ResumeGetMany[number]>[] = [
     ),
   },
   {
+    accessorKey: "status",
+    header: () => <div className="p-2 text-[16px] font-bold">Status</div>,
+    cell: ({ row }) => (
+      <StatusIndicator status={row.original.status || "uploading"} />
+    ),
+  },
+  {
     accessorKey: "ATSScore",
-    header: () => <div className=" p-2 text-[16px] font-bold">ATS Score</div>,
+    header: () => (
+      <div className=" p-2 text-[16px] font-bold">Overall Score</div>
+    ),
     cell: ({ row }) => {
-      const score = row.original.feedback?.ATS.score;
-      if (typeof score !== "number") {
-        return <span className="text-muted-foreground">Processing...</span>;
+      const score = row.original.feedback?.overallScore;
+      const status = row.original.status;
+
+      if (status !== "completed" || typeof score !== "number") {
+        return <span className="text-muted-foreground">-</span>;
       }
       return (
         <div
