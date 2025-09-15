@@ -6,6 +6,7 @@ import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import z from "zod";
 import { serverCreateSchema } from "../schema";
 import { put } from "@vercel/blob";
+import { inngest } from "@/inngest/client";
 
 function extractPdfBase64(input: z.infer<typeof serverCreateSchema>["file"]) {
   if (typeof input === "string") {
@@ -99,9 +100,10 @@ export const resumeRouter = createTRPCRouter({
           imageUrl = await uploadImageToBlob(imageBuffer, imageFileName);
         }
       }
+      console.log(imageUrl);
 
       // Save to database
-      const [createdResume] = await db
+      const createdResumeArray = await db
         .insert(resume)
         .values({
           userId: ctx.auth.user.id,
@@ -112,6 +114,19 @@ export const resumeRouter = createTRPCRouter({
           imagePath: imageUrl, // PNG URL from blob upload (if provided)
         })
         .returning();
+
+      const createdResume = createdResumeArray[0];
+
+      await inngest.send({
+        name: "resume/processing",
+        data: {
+          resumeId: createdResume.id,
+          userId: ctx.auth.user.id,
+          image: imageUrl,
+          jobTitle: input.jobTitle,
+          jobDescription: input.jobDescription,
+        },
+      });
       return createdResume;
     }),
   getOne: protectedProcedure
@@ -119,6 +134,28 @@ export const resumeRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const [resumeData] = await db
         .select({ ...getTableColumns(resume) })
+        .from(resume)
+        .where(
+          and(eq(resume.id, input.id), eq(resume.userId, ctx.auth.user.id))
+        );
+
+      if (!resumeData) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Resume not found",
+        });
+      }
+      return resumeData;
+    }),
+  getStatus: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const [resumeData] = await db
+        .select({
+          id: resume.id,
+          status: resume.status,
+          updatedAt: resume.updatedAt,
+        })
         .from(resume)
         .where(
           and(eq(resume.id, input.id), eq(resume.userId, ctx.auth.user.id))

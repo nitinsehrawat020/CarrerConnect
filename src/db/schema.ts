@@ -88,6 +88,14 @@ export const meetingStatus = pgEnum("meeting_status", [
   "cancelled",
 ]);
 
+export const resumeStatus = pgEnum("resume_status", [
+  "uploading",
+  "converting",
+  "analyzing",
+  "completed",
+  "failed",
+]);
+
 export const meetings = pgTable("meetings", {
   id: text("id")
     .primaryKey()
@@ -135,6 +143,7 @@ export const resume = pgTable("resume", {
   jobDescription: text("jobDescription").notNull(),
   resumePath: text("resumePath").notNull(),
   feedback: jsonb("feedback").$type<FeedbackJSON>(),
+  status: resumeStatus("status").notNull().default("uploading"),
   createAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
