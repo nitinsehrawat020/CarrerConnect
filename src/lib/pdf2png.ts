@@ -24,7 +24,7 @@ async function loadPdfJs(): Promise<any> {
       // Set the worker source to match the installed version 5.3.93
       // Using unpkg CDN for compatibility with Next.js 15/Turbopack
       if (!lib.GlobalWorkerOptions.workerSrc) {
-        lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.3.93/build/pdf.worker.min.mjs`;
+        lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       }
       pdfjsLib = lib;
       return lib;

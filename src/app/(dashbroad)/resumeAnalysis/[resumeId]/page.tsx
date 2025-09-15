@@ -23,7 +23,7 @@ const ResumeIdPage = async ({ params }: Props) => {
   }
 
   const queryClient = getQueryClient();
-  await queryClient.prefetchQuery(
+  void queryClient.prefetchQuery(
     trpc.resume.getOne.queryOptions({ id: resumeId })
   );
 

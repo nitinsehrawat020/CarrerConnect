@@ -6,11 +6,12 @@ import { getQueryClient, trpc } from "@/trpc/server";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+export const dynamic = "force-dynamic";
 
 const page = async () => {
   const queryClient = getQueryClient();
 
-  await queryClient.prefetchQuery(trpc.resume.getMany.queryOptions());
+  void queryClient.prefetchQuery(trpc.resume.getMany.queryOptions());
   return (
     <>
       <ResumeHeaderList />
