@@ -3,7 +3,7 @@
 import { ColumnDef } from "@tanstack/react-table";
 import { ResumeGetMany } from "../../types";
 import {
-  CornerDownRightIcon,
+  CornerDownRight,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -11,6 +11,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import GeneratedAvatar from "@/components/generated-avatar";
 
 const scoreColor = (score?: number) => {
   if (typeof score !== "number") return "bg-gray-100 text-gray-500";
@@ -74,13 +75,20 @@ export const columns: ColumnDef<ResumeGetMany[number]>[] = [
     header: () => <div className="p-2 text-[16px] font-bold">Company Name</div>,
     cell: ({ row }) => (
       <div className="flex flex-col gap-y-1">
-        <span className="font-semibold capitalize">
-          {row.original.companyName}
-        </span>
+        <div className="flex items-center gap-x-2">
+          <GeneratedAvatar
+            varient="initials"
+            seed={row.original.companyName}
+            className="size-7"
+          />
+          <span className="font-semibold capitalize">
+            {row.original.companyName}
+          </span>
+        </div>
 
         <div className="flex items-center gap-x-2">
           <div className="flex items-center gap-x-1">
-            <CornerDownRightIcon className="size-3 text-muted-foreground" />
+            <CornerDownRight className="size-3 text-muted-foreground" />
             <span className="text-sm text-muted-foreground max-w-[200px] truncate capitalize">
               {row.original.jobTitle}
             </span>

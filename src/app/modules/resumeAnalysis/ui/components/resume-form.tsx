@@ -136,7 +136,7 @@ export const ResumeForm = ({ onSucces, onCancel }: ResumeFormProps) => {
 
   const createResume = useMutation(
     trpc.resume.create.mutationOptions({
-      onSuccess: async (res) => {
+      onSuccess: async () => {
         toast.success("Resume uploaded successfully!");
         toast.info(
           "Your resume is being analyzed. Check the table below for status updates."
