@@ -32,14 +32,14 @@ function verifySignatureWithSDK(body: string, signature: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Support multiple header names that providers may use
-  const signature =
-    req.headers.get("x-signature") ||
-    req.headers.get("x-webhook-signature") ||
-    req.headers.get("x-stream-signature");
-  // Stream webhooks include an `x-signature` header; no additional API key header is sent.
-  if (!signature) {
-    return NextResponse.json({ error: "missing signature" }, { status: 400 });
+  const signature = req.headers.get("x-signature");
+  const apikey = req.headers.get("x-api-key");
+
+  if (!signature || !apikey) {
+    return NextResponse.json(
+      { error: "missing signnature or API key" },
+      { status: 400 }
+    );
   }
 
   const body = await req.text();
@@ -91,25 +91,14 @@ export async function POST(req: NextRequest) {
     if (!existingAgent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
-    try {
-      if (!process.env.OPENAI_API_KEY) {
-        console.error(
-          "[webhook] OPENAI_API_KEY is not set; AI assistant cannot connect."
-        );
-      }
-      const call = streamVideo.video.call("default", meetingId);
-      const realtimeClient = await streamVideo.video.connectOpenAi({
-        call,
-        openAiApiKey: process.env.OPENAI_API_KEY!,
-        agentUserId: existingAgent.id,
-      });
+    const call = streamVideo.video.call("default", meetingId);
+    const realtimeClient = await streamVideo.video.connectOpenAi({
+      call,
+      openAiApiKey: process.env.OPENAI_API_KEY!,
+      agentUserId: existingAgent.id,
+    });
 
-      realtimeClient.updateSession({ instructions: existingAgent.instruction });
-    } catch (err) {
-      console.error("[webhook] Failed to connect OpenAI Realtime:", err);
-      // Return 200 so provider doesn't retry endlessly; log for investigation
-      return NextResponse.json({ status: "ai-connection-failed" });
-    }
+    realtimeClient.updateSession({ instructions: existingAgent.instruction });
   } else if (eventType === "call.session_participant_left") {
     const event = payload as CallSessionParticipantLeftEvent;
     const meetingId = event.call_cid.split(":")[1];

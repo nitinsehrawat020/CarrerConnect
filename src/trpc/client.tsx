@@ -24,13 +24,7 @@ function getQueryClient() {
 function getUrl() {
   const base = (() => {
     if (typeof window !== "undefined") return "";
-    // Prefer explicit NEXT_PUBLIC_APP_URL; fallback to VERCEL_URL in prod
-    return (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000")
-    );
+    return process.env.NEXT_PUBLIC_APP_URL;
   })();
   return `${base}/api/trpc`;
 }
