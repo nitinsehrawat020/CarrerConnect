@@ -11,7 +11,7 @@ import {
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 
 import { useTRPC } from "@/trpc/client";
@@ -27,6 +27,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import GeneratedAvatar from "@/components/generated-avatar";
 import { convertPdfToImage } from "@/lib/pdf2png";
+import { Loader2 } from "lucide-react";
 
 // Maximum PDF file size: 10MB
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
@@ -38,6 +39,7 @@ interface ResumeFormProps {
 
 export const ResumeForm = ({ onSucces, onCancel }: ResumeFormProps) => {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const form = useForm<z.infer<typeof serverCreateSchema>>({
     resolver: zodResolver(serverCreateSchema),
@@ -134,13 +136,16 @@ export const ResumeForm = ({ onSucces, onCancel }: ResumeFormProps) => {
 
   const createResume = useMutation(
     trpc.resume.create.mutationOptions({
-      onSuccess: () => {
-        toast.success("Resume uploaded successfully");
+      onSuccess: async () => {
+        toast.success("Resume uploaded successfully!");
+        toast.info(
+          "Your resume is being analyzed. Check the table below for status updates."
+        );
+        await queryClient.invalidateQueries(trpc.resume.getMany.queryOptions());
         onSucces?.();
       },
       onError: (error) => {
         console.log(error);
-
         toast.error(error.message);
       },
     })
@@ -247,7 +252,16 @@ export const ResumeForm = ({ onSucces, onCancel }: ResumeFormProps) => {
             </Button>
           )}
 
-          <Button type="submit">Create</Button>
+          <Button type="submit" disabled={createResume.isPending}>
+            {createResume.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              "Create Resume Analysis"
+            )}
+          </Button>
         </div>
       </form>
     </Form>
