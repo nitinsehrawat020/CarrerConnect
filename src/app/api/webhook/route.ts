@@ -1,6 +1,4 @@
-import OpenAi from "openai";
-
-import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
+import { generativeVisionModel } from "@/lib/visionAi";
 
 import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -20,12 +18,6 @@ import { streamVideo } from "@/lib/stream-video";
 import { inngest } from "@/inngest/client";
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
-
-const token = process.env.GITHUB_TOKEN;
-const endpoint = "https://models.github.ai/inference";
-const model = "openai/gpt-5";
-
-const openaiClient = new OpenAi({ baseURL: endpoint, apiKey: token });
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
   return streamVideo.verifyWebhook(body, signature);
@@ -91,14 +83,34 @@ export async function POST(req: NextRequest) {
     if (!existingAgent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
-    const call = streamVideo.video.call("default", meetingId);
-    const realtimeClient = await streamVideo.video.connectOpenAi({
-      call,
-      openAiApiKey: process.env.OPENAI_API_KEY!,
-      agentUserId: existingAgent.id,
-    });
 
-    realtimeClient.updateSession({ instructions: existingAgent.instruction });
+    // Initialize Google Gemini Live for audio-to-audio interaction
+    const call = streamVideo.video.call("default", meetingId);
+
+    // Set up audio processing for Gemini Live
+    // Note: This is a conceptual implementation - actual Gemini Live integration
+    // would require setting up WebRTC audio streams and Gemini Live API calls
+    console.log(
+      `Setting up Gemini Live for meeting ${meetingId} with agent: ${existingAgent.name}`
+    );
+    console.log(`Agent instructions: ${existingAgent.instruction}`);
+
+    // Instead of connectOpenAi, we'll handle audio through custom Gemini Live implementation
+    // This would involve:
+    // 1. Capturing audio from the call
+    // 2. Sending audio to Gemini Live API
+    // 3. Receiving audio response from Gemini
+    // 4. Playing audio response back to the call
+
+    // For now, we'll use a placeholder that maintains the meeting state
+    await call.update({
+      custom: {
+        meetingId: meetingId,
+        agentId: existingAgent.id,
+        aiProvider: "gemini-live",
+        instructions: existingAgent.instruction,
+      },
+    });
   } else if (eventType === "call.session_participant_left") {
     const event = payload as CallSessionParticipantLeftEvent;
     const meetingId = event.call_cid.split(":")[1];
@@ -106,8 +118,21 @@ export async function POST(req: NextRequest) {
     if (!meetingId) {
       return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
     }
+
     const call = streamVideo.video.call("default", meetingId);
     await call.end();
+
+    // Clean up Gemini Live session
+    try {
+      await fetch(
+        `${process.env.NEXT_PUBLIC_APP_URL}/api/gemini-live?meetingId=${meetingId}`,
+        {
+          method: "DELETE",
+        }
+      );
+    } catch (error) {
+      console.error("Failed to cleanup Gemini Live session:", error);
+    }
   } else if (eventType === "call.session_ended") {
     const event = payload as CallEndedEvent;
     const meetingId = event.call.custom?.meetingId;
@@ -206,24 +231,33 @@ export async function POST(req: NextRequest) {
       const previousMessage = channel.state.messages
         .slice(-5)
         .filter((msg) => msg.text && msg.text.trim() !== "")
-        .map<ChatCompletionMessageParam>((message) => ({
-          role: message.user?.id === existingAgent.id ? "assistant" : "user",
-          content: message.text || "",
+        .map((message) => ({
+          role: message.user?.id === existingAgent.id ? "model" : "user",
+          parts: [{ text: message.text || "" }],
         }));
 
-      const GPTResponse = await openaiClient.chat.completions.create({
-        messages: [
-          { role: "system", content: instructions },
-          ...previousMessage,
-          { role: "user", content: text },
-        ],
-        model: model,
+      // Build conversation history for Vertex AI
+      const conversationHistory = [
+        {
+          role: "user",
+          parts: [{ text: `System: ${instructions}` }],
+        },
+        ...previousMessage,
+        {
+          role: "user",
+          parts: [{ text: text }],
+        },
+      ];
+
+      const aiResponse = await generativeVisionModel.generateContent({
+        contents: conversationHistory,
       });
 
-      const GPSResponseText = GPTResponse.choices[0].message.content;
-      if (!GPSResponseText) {
+      const responseText =
+        aiResponse.response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!responseText) {
         return NextResponse.json(
-          { error: "No response from GPT" },
+          { error: "No response from AI" },
           { status: 400 }
         );
       }
@@ -240,7 +274,7 @@ export async function POST(req: NextRequest) {
       });
 
       channel.sendMessage({
-        text: GPSResponseText,
+        text: responseText,
         user: {
           id: existingAgent.id,
           name: existingAgent.name,

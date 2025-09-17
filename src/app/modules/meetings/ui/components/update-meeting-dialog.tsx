@@ -22,7 +22,7 @@ const UpdateMeetingDialog = ({
     >
       <MeetingForm
         onCancel={() => onOpenChange(false)}
-        onSuccess={(id) => {
+        onSuccess={() => {
           onOpenChange(false);
         }}
         initialValues={initialValues}

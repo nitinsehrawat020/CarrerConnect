@@ -3,22 +3,11 @@ import { db } from "@/db";
 import { agents, meetings, resume, user } from "@/db/schema";
 import { inngest } from "@/inngest/client";
 import { eq, inArray } from "drizzle-orm";
-import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
-import Groq from "groq-sdk";
+import { createAgent, gemini, TextMessage } from "@inngest/agent-kit";
 
 import JSONL from "jsonl-parse-stringify";
 import { TRPCError } from "@trpc/server";
-
-// const token = process.env.GITHUB_TOKEN;
-// const endpoint = "https://models.github.ai/inference";
-// const model = "openai/gpt-5";
-
-// Initialize Groq with API key from environment; throw early if not set
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-if (!GROQ_API_KEY) {
-  console.error("Missing GROQ_API_KEY environment variable.");
-}
-const groq = new Groq({ apiKey: GROQ_API_KEY });
+import { generativeVisionModel } from "@/lib/visionAi";
 
 const summarizer = createAgent({
   name: "summarizer",
@@ -42,7 +31,10 @@ Example:
 #### Next Section
 - Feature X automatically does Y
 - Mention of integration with Z`.trim(),
-  model: openai({ model: "o3-mini", apiKey: process.env.OPENAI_API_KEY }),
+  model: gemini({
+    model: "gemini-1.5-flash",
+    apiKey: process.env.GEMINI_API_KEY,
+  }),
 });
 export const meetingsProcessing = inngest.createFunction(
   { id: "meetings/processing" },
@@ -167,11 +159,10 @@ export const prepareInstructions = ({
       Return the analysis as an JSON object, without any other text and without the backticks.
       Do not include any other text or comments.`;
 
-export const resumeProcessing = inngest.createFunction(
-  { id: "resume/processing" },
-  { event: "resume/processing" },
+export const resumeProcessingGoggleAi = inngest.createFunction(
+  { id: "resume/analysis" },
+  { event: "resume/analysis" },
   async ({ event, step }) => {
-    // Step 1: Update status to converting
     await step.run("update-status-converting", async () => {
       await db
         .update(resume)
@@ -193,41 +184,34 @@ export const resumeProcessing = inngest.createFunction(
         .where(eq(resume.id, event.data.resumeId));
     });
 
-    // Step 3: Get AI response
     const feedback = await step.run("get-response", async () => {
-      if (!GROQ_API_KEY) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "GROQ_API_KEY is not configured",
-        });
-      }
-      const response = await groq.chat.completions.create({
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: prepareInstructions({
-                  jobTitle: event.data.jobTitle,
-                  jobDescription: event.data.jobDescription,
-                }),
-              },
-              { type: "image_url", image_url: { url: event.data.image } },
-            ],
-          },
-        ],
-        // Use a valid Groq model; update as needed
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      });
-      return response;
+      const filePart = {
+        fileData: {
+          fileUri: event.data.image, // Use the actual image from event data
+          mimeType: "image/png", // Changed to png as your images are typically png
+        },
+      };
+      const textPart = {
+        text: prepareInstructions({
+          jobTitle: event.data.jobTitle,
+          jobDescription: event.data.jobDescription,
+        }),
+      };
+      const request = {
+        contents: [{ role: "user", parts: [textPart, filePart] }],
+      };
+      const streamingResult = await generativeVisionModel.generateContentStream(
+        request
+      );
+
+      const aggregatedResponse = await streamingResult.response;
+      console.log(aggregatedResponse.candidates?.at(0)?.content.parts[0].text);
+
+      return aggregatedResponse.candidates?.at(0)?.content.parts[0].text;
     });
 
-    const aiContent = feedback.choices.at(0)?.message?.content;
-
-    // Step 4: Save feedback and mark as completed
     await step.run("save-feedback", async () => {
-      if (!aiContent) {
+      if (!feedback) {
         // Mark as failed if no content received
         await db
           .update(resume)
@@ -244,8 +228,21 @@ export const resumeProcessing = inngest.createFunction(
       }
 
       try {
-        // Parse the AI response as JSON
-        const feedbackData = JSON.parse(aiContent);
+        // Clean the AI response by removing markdown code blocks
+        let cleanedFeedback = feedback;
+        if (feedback.includes("```json")) {
+          // Remove ```json and ``` markers
+          cleanedFeedback = feedback
+            .replace(/```json\s*/g, "")
+            .replace(/```\s*/g, "")
+            .trim();
+        } else if (feedback.includes("```")) {
+          // Remove generic ``` markers
+          cleanedFeedback = feedback.replace(/```\s*/g, "").trim();
+        }
+
+        // Parse the cleaned AI response as JSON
+        const feedbackData = JSON.parse(cleanedFeedback);
 
         // Save the feedback and mark as completed
         await db
