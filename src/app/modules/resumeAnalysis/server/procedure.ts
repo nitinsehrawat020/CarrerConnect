@@ -118,7 +118,7 @@ export const resumeRouter = createTRPCRouter({
       const createdResume = createdResumeArray[0];
 
       await inngest.send({
-        name: "resume/processing",
+        name: "resume/analysis",
         data: {
           resumeId: createdResume.id,
           userId: ctx.auth.user.id,

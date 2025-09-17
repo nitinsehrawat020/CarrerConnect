@@ -68,6 +68,12 @@ export const CallLobby = ({ onJoin }: Props) => {
               true ? disabledVideoPreview : AllowBrowserPermission
             }
           />
+          {hasBrowserMediaPermission && (
+            <div className="flex justify-center items-center gap-2 p-2">
+              <ToggleAudioPreviewButton />
+              <ToggleVideoPreviewButton />
+            </div>
+          )}
           <div className="flex gap=x-2 justify-between w-full">
             <Button asChild variant={"ghost"}>
               <Link href={"/meetings"}>Cancel</Link>
