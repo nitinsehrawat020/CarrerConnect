@@ -84,33 +84,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    // Initialize Google Gemini Live for audio-to-audio interaction
     const call = streamVideo.video.call("default", meetingId);
-
-    // Set up audio processing for Gemini Live
-    // Note: This is a conceptual implementation - actual Gemini Live integration
-    // would require setting up WebRTC audio streams and Gemini Live API calls
-    console.log(
-      `Setting up Gemini Live for meeting ${meetingId} with agent: ${existingAgent.name}`
-    );
-    console.log(`Agent instructions: ${existingAgent.instruction}`);
-
-    // Instead of connectOpenAi, we'll handle audio through custom Gemini Live implementation
-    // This would involve:
-    // 1. Capturing audio from the call
-    // 2. Sending audio to Gemini Live API
-    // 3. Receiving audio response from Gemini
-    // 4. Playing audio response back to the call
-
-    // For now, we'll use a placeholder that maintains the meeting state
-    await call.update({
-      custom: {
-        meetingId: meetingId,
-        agentId: existingAgent.id,
-        aiProvider: "gemini-live",
-        instructions: existingAgent.instruction,
-      },
+    const realtimeClient = await streamVideo.video.connectOpenAi({
+      call,
+      openAiApiKey: process.env.OPENAI_API_KEY!,
+      agentUserId: existingAgent.id,
     });
+
+    realtimeClient.updateSession({ instructions: existingAgent.instruction });
   } else if (eventType === "call.session_participant_left") {
     const event = payload as CallSessionParticipantLeftEvent;
     const meetingId = event.call_cid.split(":")[1];
@@ -121,18 +102,6 @@ export async function POST(req: NextRequest) {
 
     const call = streamVideo.video.call("default", meetingId);
     await call.end();
-
-    // Clean up Gemini Live session
-    try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL}/api/gemini-live?meetingId=${meetingId}`,
-        {
-          method: "DELETE",
-        }
-      );
-    } catch (error) {
-      console.error("Failed to cleanup Gemini Live session:", error);
-    }
   } else if (eventType === "call.session_ended") {
     const event = payload as CallEndedEvent;
     const meetingId = event.call.custom?.meetingId;
@@ -145,6 +114,27 @@ export async function POST(req: NextRequest) {
       .update(meetings)
       .set({ status: "processing", endedAt: new Date() })
       .where(and(eq(meetings.id, meetingId), eq(meetings.status, "active")));
+  } else if (eventType === "call.transcription_ready") {
+    const event = payload as CallTranscriptionReadyEvent;
+    const meetingId = event.call_cid.split(":")[1];
+
+    const [updatedMeeting] = await db
+      .update(meetings)
+      .set({ transcribleUrl: event.call_transcription.url })
+      .where(eq(meetings.id, meetingId))
+      .returning();
+
+    if (!updatedMeeting) {
+      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+    }
+
+    await inngest.send({
+      name: "meetings/processing",
+      data: {
+        meetingId: updatedMeeting.id,
+        transcriptUrl: updatedMeeting.transcribleUrl,
+      },
+    });
   } else if (eventType === "call.transcription_ready") {
     const event = payload as CallTranscriptionReadyEvent;
     const meetingId = event.call_cid.split(":")[1];
