@@ -17,6 +17,7 @@ import { SessionView } from "../components/session-view";
 import { Welcome } from "../components/welcome";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
+import { redirect } from "next/navigation";
 
 const MotionWelcome = motion.create(Welcome);
 const MotionSessionView = motion.create(SessionView);
@@ -29,9 +30,10 @@ interface AppProps {
 export const CallView = ({ appConfig, meetingId }: AppProps) => {
   const trpc = useTRPC();
 
-  const { data } = useSuspenseQuery(
+  const { data: meetingData } = useSuspenseQuery(
     trpc.meetings.getOne.queryOptions({ id: meetingId })
   );
+  console.log(meetingData);
 
   const room = useMemo(() => new Room(), []);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -57,6 +59,11 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
     const onDisconnected = () => {
       setSessionStarted(false);
       refreshConnectionDetails();
+
+      handleMeetingEnd();
+    };
+    const handleMeetingEnd = async () => {
+      redirect("/meetings");
     };
     const onMediaDevicesError = (error: Error) => {
       toastAlert({

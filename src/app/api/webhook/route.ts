@@ -1,278 +1,163 @@
-import { generativeVisionModel } from "@/lib/visionAi";
-
-import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-
-import {
-  MessageNewEvent,
-  CallEndedEvent,
-  CallTranscriptionReadyEvent,
-  CallSessionParticipantLeftEvent,
-  CallSessionStartedEvent,
-  CallRecordingReadyEvent,
-} from "@stream-io/node-sdk";
+import { WebhookReceiver, WebhookEvent } from "livekit-server-sdk";
+import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { agents, meetings } from "@/db/schema";
-import { streamVideo } from "@/lib/stream-video";
+import { meetings } from "@/db/schema";
 import { inngest } from "@/inngest/client";
-import { generateAvatarUri } from "@/lib/avatar";
-import { streamChat } from "@/lib/stream-chat";
-
-function verifySignatureWithSDK(body: string, signature: string): boolean {
-  return streamVideo.verifyWebhook(body, signature);
-}
 
 export async function POST(req: NextRequest) {
-  const signature = req.headers.get("x-signature");
-  const apikey = req.headers.get("x-api-key");
+  try {
+    // Initialize LiveKit webhook receiver
+    const receiver = new WebhookReceiver(
+      process.env.LIVEKIT_API_KEY!,
+      process.env.LIVEKIT_API_SECRET!
+    );
 
-  if (!signature || !apikey) {
+    // Get the raw body and authorization header
+    const body = await req.text();
+    const authHeader = req.headers.get("Authorization") || "";
+
+    // Verify and parse the webhook event
+    const event: WebhookEvent = await receiver.receive(body, authHeader);
+
+    console.log("LiveKit webhook event received:", event.event);
+
+    // Handle different LiveKit events
+    switch (event.event) {
+      case "room_started":
+        await handleRoomStarted(event);
+        break;
+
+      case "room_finished":
+        await handleRoomFinished(event);
+        break;
+
+      case "participant_joined":
+        await handleParticipantJoined(event);
+        break;
+
+      case "participant_left":
+        await handleParticipantLeft(event);
+        break;
+
+      case "track_published":
+        await handleTrackPublished(event);
+        break;
+
+      case "track_unpublished":
+        await handleTrackUnpublished(event);
+        break;
+
+      case "egress_started":
+        await handleEgressStarted(event);
+        break;
+
+      case "egress_ended":
+        await handleEgressEnded(event);
+        break;
+
+      default:
+        console.log("Unhandled LiveKit event:", event.event);
+    }
+
+    return NextResponse.json({
+      status: "success",
+      event: event.event,
+      room: event.room?.name,
+    });
+  } catch (error) {
+    console.error("LiveKit webhook error:", error);
     return NextResponse.json(
-      { error: "missing signnature or API key" },
+      {
+        status: "error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 400 }
     );
   }
+}
 
-  const body = await req.text();
+// Event handlers
+async function handleRoomStarted(event: WebhookEvent) {
+  console.log(`Room started: ${event.room?.name}`);
+}
 
-  if (!verifySignatureWithSDK(body, signature)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-  }
-  let payload: unknown;
+async function handleRoomFinished(event: WebhookEvent) {
+  console.log(`Room finished: ${event.room?.name}`);
+}
 
-  try {
-    payload = JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-  const eventType = (payload as Record<string, unknown>)?.type;
+async function handleParticipantJoined(event: WebhookEvent) {
+  console.log(event.participant?.identity);
+}
 
-  if (eventType === "call.session_started") {
-    const event = payload as CallSessionStartedEvent;
-    const meetingId = event.call.custom?.meetingId;
-    if (!meetingId) {
-      return NextResponse.json({ error: "messing meetingId" }, { status: 400 });
-    }
-    const [existingMeeting] = await db
-      .select()
-      .from(meetings)
-      .where(
-        and(
-          eq(meetings.id, meetingId),
-          not(eq(meetings.status, "completed")),
-          not(eq(meetings.status, "cancelled")),
-          not(eq(meetings.status, "processing")),
-          not(eq(meetings.status, "active"))
-        )
-      );
-    if (!existingMeeting) {
-      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-    }
+async function handleParticipantLeft(event: WebhookEvent) {}
 
-    await db
-      .update(meetings)
-      .set({ status: "active", startedAt: new Date() })
-      .where(eq(meetings.id, existingMeeting.id));
+async function handleTrackPublished(event: WebhookEvent) {
+  console.log(
+    `Track published: ${event.track?.type} by ${event.participant?.identity}`
+  );
+}
 
-    const [existingAgent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, existingMeeting.agentId));
+async function handleTrackUnpublished(event: WebhookEvent) {
+  console.log(
+    `Track unpublished: ${event.track?.type} by ${event.participant?.identity}`
+  );
 
-    if (!existingAgent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
+  // Handle track unpublishing
+}
 
-    const call = streamVideo.video.call("default", meetingId);
-    const realtimeClient = await streamVideo.video.connectOpenAi({
-      call,
-      openAiApiKey: process.env.OPENAI_API_KEY!,
-      agentUserId: existingAgent.id,
+async function handleEgressStarted(event: WebhookEvent) {
+  console.log(`Egress started for room: ${event.room?.name}`);
+
+  // Handle recording/streaming start
+  if (event.room && event.egressInfo) {
+    await inngest.send({
+      name: "livekit/egress.started",
+      data: {
+        roomName: event.room.name,
+        egressId: event.egressInfo.egressId,
+        egressType:
+          typeof event.egressInfo.details === "string"
+            ? event.egressInfo.details
+            : "unknown",
+        startedAt: new Date(),
+      },
     });
+  }
+}
 
-    realtimeClient.updateSession({ instructions: existingAgent.instruction });
-  } else if (eventType === "call.session_participant_left") {
-    const event = payload as CallSessionParticipantLeftEvent;
-    const meetingId = event.call_cid.split(":")[1];
+async function handleEgressEnded(event: WebhookEvent) {
+  console.log(`Egress ended for room: ${event.room?.name}`);
 
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
-    }
+  // Handle recording/streaming completion
+  if (event.room && event.egressInfo) {
+    const meetingId = event.room.name; // Adjust based on your room naming convention
 
-    const call = streamVideo.video.call("default", meetingId);
-    await call.end();
-  } else if (eventType === "call.session_ended") {
-    const event = payload as CallEndedEvent;
-    const meetingId = event.call.custom?.meetingId;
-
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
-    }
-
-    await db
-      .update(meetings)
-      .set({ status: "processing", endedAt: new Date() })
-      .where(and(eq(meetings.id, meetingId), eq(meetings.status, "active")));
-  } else if (eventType === "call.transcription_ready") {
-    const event = payload as CallTranscriptionReadyEvent;
-    const meetingId = event.call_cid.split(":")[1];
-
-    const [updatedMeeting] = await db
-      .update(meetings)
-      .set({ transcribleUrl: event.call_transcription.url })
-      .where(eq(meetings.id, meetingId))
-      .returning();
-
-    if (!updatedMeeting) {
-      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+    // If this was a recording and has file results, update the meeting with the recording URL
+    if (event.egressInfo.fileResults?.[0]) {
+      await db
+        .update(meetings)
+        .set({
+          recordingUrl: event.egressInfo.fileResults[0].location,
+        })
+        .where(eq(meetings.id, meetingId));
     }
 
     await inngest.send({
-      name: "meetings/processing",
+      name: "livekit/egress.ended",
       data: {
-        meetingId: updatedMeeting.id,
-        transcriptUrl: updatedMeeting.transcribleUrl,
+        roomName: event.room.name,
+        meetingId: meetingId,
+        egressId: event.egressInfo.egressId,
+        egressType:
+          typeof event.egressInfo.details === "string"
+            ? event.egressInfo.details
+            : "unknown",
+        fileLocation: event.egressInfo.fileResults?.[0]?.location,
+        status: event.egressInfo.status,
+        endedAt: new Date(),
       },
     });
-  } else if (eventType === "call.transcription_ready") {
-    const event = payload as CallTranscriptionReadyEvent;
-    const meetingId = event.call_cid.split(":")[1];
-
-    const [updatedMeeting] = await db
-      .update(meetings)
-      .set({ transcribleUrl: event.call_transcription.url })
-      .where(eq(meetings.id, meetingId))
-      .returning();
-
-    if (!updatedMeeting) {
-      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-    }
-
-    await inngest.send({
-      name: "meetings/processing",
-      data: {
-        meetingId: updatedMeeting.id,
-        transcriptUrl: updatedMeeting.transcribleUrl,
-      },
-    });
-  } else if (eventType === "call.recording_ready") {
-    const event = payload as CallRecordingReadyEvent;
-    const meetingId = event.call_cid.split(":")[1];
-    await db
-      .update(meetings)
-      .set({ recordingUrl: event.call_recording.url })
-      .where(eq(meetings.id, meetingId))
-      .returning();
-  } else if (eventType === "message.new") {
-    const event = payload as MessageNewEvent;
-
-    const userId = event.user?.id;
-    const channelId = event.channel_id;
-    const text = event.message?.text;
-
-    if (!userId || !channelId || !text) {
-      return NextResponse.json(
-        { error: "Missing required field" },
-        { status: 400 }
-      );
-    }
-    const [existingMeeting] = await db
-      .select()
-      .from(meetings)
-      .where(and(eq(meetings.id, channelId), eq(meetings.status, "completed")));
-
-    if (!existingMeeting) {
-      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-    }
-    const [existingAgent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, existingMeeting.agentId));
-
-    if (!existingAgent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
-
-    if (userId !== existingAgent.id) {
-      const instructions = `
-      You are an AI assistant helping the user revisit a recently completed meeting.
-      Below is a summary of the meeting, generated from the transcript:
-      
-      ${existingMeeting.summary}
-      
-      The following are your original instructions from the live meeting assistant. Please continue to follow these behavioral guidelines as you assist the user:
-      
-      ${existingAgent.instruction}
-      
-      The user may ask questions about the meeting, request clarifications, or ask for follow-up actions.
-      Always base your responses on the meeting summary above.
-      
-      You also have access to the recent conversation history between you and the user. Use the context of previous messages to provide relevant, coherent, and helpful responses. If the user's question refers to something discussed earlier, make sure to take that into account and maintain continuity in the conversation.
-      
-      If the summary does not contain enough information to answer a question, politely let the user know.
-      
-      Be concise, helpful, and focus on providing accurate information from the meeting and the ongoing conversation.
-      `;
-
-      const channel = streamChat.channel("messaging", channelId);
-      await channel.watch();
-
-      const previousMessage = channel.state.messages
-        .slice(-5)
-        .filter((msg) => msg.text && msg.text.trim() !== "")
-        .map((message) => ({
-          role: message.user?.id === existingAgent.id ? "model" : "user",
-          parts: [{ text: message.text || "" }],
-        }));
-
-      // Build conversation history for Vertex AI
-      const conversationHistory = [
-        {
-          role: "user",
-          parts: [{ text: `System: ${instructions}` }],
-        },
-        ...previousMessage,
-        {
-          role: "user",
-          parts: [{ text: text }],
-        },
-      ];
-
-      const aiResponse = await generativeVisionModel.generateContent({
-        contents: conversationHistory,
-      });
-
-      const responseText =
-        aiResponse.response.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!responseText) {
-        return NextResponse.json(
-          { error: "No response from AI" },
-          { status: 400 }
-        );
-      }
-
-      const avatarUrl = generateAvatarUri({
-        seed: existingAgent.name,
-        variant: "botttsNeutral",
-      });
-
-      streamChat.upsertUser({
-        id: existingAgent.id,
-        name: existingAgent.name,
-        image: avatarUrl,
-      });
-
-      channel.sendMessage({
-        text: responseText,
-        user: {
-          id: existingAgent.id,
-          name: existingAgent.name,
-          image: avatarUrl,
-        },
-      });
-    }
   }
-
-  return NextResponse.json({ status: "ok" });
 }

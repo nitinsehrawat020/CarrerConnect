@@ -99,7 +99,7 @@ export const SessionView = ({
       ref={ref}
       inert={disabled}
       className={cn(
-        "opacity-0",
+        "opacity-0 bg-amber-300",
         // prevent page scrollbar
         // when !chatOpen due to 'translate-y-20'
         !chatOpen && "max-h-svh overflow-hidden"
