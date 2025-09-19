@@ -140,7 +140,7 @@ export function AgentControlBar({
           {visibleControls.microphone && (
             <div className="flex items-center gap-0">
               <TrackToggle
-                variant="primary"
+                variant="default"
                 source={Track.Source.Microphone}
                 pressed={microphoneToggle.enabled}
                 disabled={microphoneToggle.pending}
@@ -183,7 +183,7 @@ export function AgentControlBar({
           {capabilities.supportsVideoInput && visibleControls.camera && (
             <div className="flex items-center gap-0">
               <TrackToggle
-                variant="primary"
+                variant="default"
                 source={Track.Source.Camera}
                 pressed={cameraToggle.enabled}
                 pending={cameraToggle.pending}
@@ -212,7 +212,7 @@ export function AgentControlBar({
           {capabilities.supportsScreenShare && visibleControls.screenShare && (
             <div className="flex items-center gap-0">
               <TrackToggle
-                variant="secondary"
+                variant="outline"
                 source={Track.Source.ScreenShare}
                 pressed={screenShareToggle.enabled}
                 disabled={screenShareToggle.pending}
@@ -224,7 +224,7 @@ export function AgentControlBar({
 
           {visibleControls.chat && (
             <Toggle
-              variant="secondary"
+              variant="outline"
               aria-label="Toggle chat"
               pressed={chatOpen}
               onPressedChange={setChatOpen}
