@@ -1,38 +1,24 @@
-"use client";
-import { useEffect, useMemo, useState } from "react";
-import { Room, RoomEvent } from "livekit-client";
-import { motion } from "motion/react";
-import {
-  RoomAudioRenderer,
-  RoomContext,
-  StartAudio,
-} from "@livekit/components-react";
+'use client';
 
-import { Toaster } from "@/components/ui/sonner";
-
-import useConnectionDetails from "@/hooks/useConnectionDetails";
-import type { AppConfig } from "@/lib/types";
-import { toastAlert } from "../components/alert-toast";
-import { SessionView } from "../components/session-view";
-import { Welcome } from "../components/welcome";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { useTRPC } from "@/trpc/client";
+import { useEffect, useMemo, useState } from 'react';
+import { Room, RoomEvent } from 'livekit-client';
+import { motion } from 'motion/react';
+import { RoomAudioRenderer, RoomContext, StartAudio } from '@livekit/components-react';
+import { toastAlert } from '@/components/alert-toast';
+import { SessionView } from '@/components/session-view';
+import { Toaster } from '@/components/ui/sonner';
+import { Welcome } from '@/components/welcome';
+import useConnectionDetails from '@/hooks/useConnectionDetails';
+import type { AppConfig } from '@/lib/types';
 
 const MotionWelcome = motion.create(Welcome);
 const MotionSessionView = motion.create(SessionView);
 
 interface AppProps {
   appConfig: AppConfig;
-  meetingId: string;
 }
 
-export const CallView = ({ appConfig, meetingId }: AppProps) => {
-  const trpc = useTRPC();
-
-  const { data } = useSuspenseQuery(
-    trpc.meetings.getOne.queryOptions({ id: meetingId })
-  );
-
+export function App({ appConfig }: AppProps) {
   const room = useMemo(() => new Room(), []);
   const [sessionStarted, setSessionStarted] = useState(false);
   const { refreshConnectionDetails, existingOrRefreshConnectionDetails } =
@@ -40,15 +26,15 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
 
   // Proactively warn if the page isn't in a secure context (required for mic/camera)
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
     const hostname = window.location.hostname;
-    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(hostname);
+    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
     const isSecure = window.isSecureContext || isLocalhost;
     if (!isSecure) {
       toastAlert({
-        title: "Media devices blocked in insecure context",
+        title: 'Media devices blocked in insecure context',
         description:
-          "Camera and microphone require HTTPS or localhost. Open this site via https://… or http://localhost in development.",
+          'Camera and microphone require HTTPS or localhost. Open this site via https://… or http://localhost in development.',
       });
     }
   }, []);
@@ -60,7 +46,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
     };
     const onMediaDevicesError = (error: Error) => {
       toastAlert({
-        title: "Encountered an error with your media devices",
+        title: 'Encountered an error with your media devices',
         description: `${error.name}: ${error.message}`,
       });
     };
@@ -74,16 +60,13 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
 
   useEffect(() => {
     let aborted = false;
-    if (sessionStarted && room.state === "disconnected") {
+    if (sessionStarted && room.state === 'disconnected') {
       Promise.all([
         room.localParticipant.setMicrophoneEnabled(true, undefined, {
           preConnectBuffer: appConfig.isPreConnectBufferEnabled,
         }),
         existingOrRefreshConnectionDetails().then((connectionDetails) =>
-          room.connect(
-            connectionDetails.serverUrl,
-            connectionDetails.participantToken
-          )
+          room.connect(connectionDetails.serverUrl, connectionDetails.participantToken)
         ),
       ]).catch((error) => {
         if (aborted) {
@@ -96,7 +79,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
         }
 
         toastAlert({
-          title: "There was an error connecting to the agent",
+          title: 'There was an error connecting to the agent',
           description: `${error.name}: ${error.message}`,
         });
       });
@@ -123,11 +106,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
         disabled={sessionStarted}
         initial={{ opacity: 1 }}
         animate={{ opacity: sessionStarted ? 0 : 1 }}
-        transition={{
-          duration: 0.5,
-          ease: "linear",
-          delay: sessionStarted ? 0 : 0.5,
-        }}
+        transition={{ duration: 0.5, ease: 'linear', delay: sessionStarted ? 0 : 0.5 }}
       />
 
       <RoomContext.Provider value={room}>
@@ -143,7 +122,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
           animate={{ opacity: sessionStarted ? 1 : 0 }}
           transition={{
             duration: 0.5,
-            ease: "linear",
+            ease: 'linear',
             delay: sessionStarted ? 0.5 : 0,
           }}
         />
@@ -152,4 +131,4 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
       <Toaster />
     </main>
   );
-};
+}
