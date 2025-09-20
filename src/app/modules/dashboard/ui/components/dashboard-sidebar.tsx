@@ -35,7 +35,7 @@ const DashboardSidebar = () => {
       <SidebarHeader className="text-sidebar-accent-foreground">
         <Link href="/" className="flex items-center gap-2 px-2 pt-2">
           <Image src="/logo.svg" alt="logo" height={36} width={36} />
-          <p className="text-2xl font-semibold"> Code Helper</p>
+          <p className="text-2xl font-semibold"> Carrer Connect</p>
         </Link>
       </SidebarHeader>{" "}
       <div className="px-4 py-2">
