@@ -4,10 +4,7 @@ agents:
     entry: src/lib/gemini-live.ts
     runtime: node
     environment:
-      GEMINI_API_KEY: AIzaSyBCT9erarHlQs91lCfsmzhICv-MOCd7W5U
-      LIVEKIT_URL: wss://code-helper-vr3cjwtw.livekit.cloud
-      LIVEKIT_API_KEY: APIF8Xiqp8kCKfG
-      LIVEKIT_API_SECRET: Hmo4SlQ5WTRe5t8Zw72UU2Dhq6GwA65tFbUo576eIHE
+     
     scaling:
       min_replicas: 1
       max_replicas: 3
