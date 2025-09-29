@@ -7,6 +7,7 @@ import {
   pgEnum,
   jsonb,
 } from "drizzle-orm/pg-core";
+import { max } from "drizzle-orm";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -16,6 +17,10 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
+  carrerPath: text("careerPath"),
+  idealJob: text("idealJob"),
+  previousJob: text("previousJob"),
+  targetCompany: text("targetCompany").array(),
   createdAt: timestamp("created_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),
@@ -76,6 +81,7 @@ export const agents = pgTable("agents", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   instruction: text("instruction").notNull(),
+  agentProfession: text("agentProfession"),
   createAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -86,6 +92,7 @@ export const meetingStatus = pgEnum("meeting_status", [
   "completed",
   "processing",
   "cancelled",
+  "uploading",
 ]);
 
 export const resumeStatus = pgEnum("resume_status", [
@@ -108,12 +115,13 @@ export const meetings = pgTable("meetings", {
     .notNull()
     .references(() => agents.id, { onDelete: "cascade" }),
   status: meetingStatus("status").notNull().default("upcoming"),
-
+  meetingAgenda: text("meetingAgenda"),
   startedAt: timestamp("started_at"),
   endedAt: timestamp("ended_at"),
-  transcribleUrl: text("transcriptUrl"),
+  transcrible: jsonb("transcript"),
   recordingUrl: text("recordingUrl"),
   summary: text("summary"),
+  egressId: text("egress_id"), // For tracking active recordings
   createAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
