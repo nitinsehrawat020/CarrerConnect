@@ -6,6 +6,8 @@ import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ agentId: string }>;
 }

@@ -12,6 +12,8 @@ import { redirect } from "next/navigation";
 import { SearchParams } from "nuqs";
 import { loadSearchParms } from "@/app/modules/agents/params";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<SearchParams>;
 }

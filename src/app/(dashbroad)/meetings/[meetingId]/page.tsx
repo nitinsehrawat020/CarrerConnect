@@ -9,6 +9,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ meetingId: string }>;
 }

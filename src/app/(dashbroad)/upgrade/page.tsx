@@ -9,6 +9,8 @@ import { ErrorState } from "@/components/error-state";
 import { LoadingState } from "@/components/loading-state";
 import { UpgradeView } from "@/app/modules/premium/ui/views/upgrade-view";
 
+export const dynamic = "force-dynamic";
+
 const Page = async () => {
   const session = await auth.api.getSession({
     headers: await headers(),

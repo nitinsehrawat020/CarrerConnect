@@ -6,10 +6,9 @@ import {
 } from "livekit-server-sdk";
 import { RoomAgentDispatch, RoomConfiguration } from "@livekit/protocol";
 import { meetingGetOne, MeetingStatus } from "@/app/modules/meetings/types";
-import { meetings, user } from "@/db/schema";
+import { meetings } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { TRPCError } from "@trpc/server";
 
 // NOTE: you are expected to define the following environment variables in `.env.local`:
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -41,11 +40,12 @@ export async function POST(req: Request) {
     // Parse agent configuration from request body
     const body = await req.json();
     const meetingData: meetingGetOne | undefined = body?.meetingData;
-    if (!meetingData)
-      return new TRPCError({
-        code: "NOT_FOUND",
-        message: "issue in getting meetingData",
-      });
+    if (!meetingData) {
+      return NextResponse.json(
+        { error: "issue in getting meetingData" },
+        { status: 404 }
+      );
+    }
 
     const [previousMeetingSummary] = await db
       .select({ transcribe: meetings.transcrible })
