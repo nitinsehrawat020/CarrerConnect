@@ -1,163 +1,134 @@
-import { StreamTranscriptItem } from "@/app/modules/meetings/types";
 import { db } from "@/db";
-import { agents, meetings, resume, user } from "@/db/schema";
+import { meetings, resume } from "@/db/schema";
 import { inngest } from "@/inngest/client";
-import { eq, inArray } from "drizzle-orm";
-import { createAgent, gemini, TextMessage } from "@inngest/agent-kit";
-
-import JSONL from "jsonl-parse-stringify";
+import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generativeVisionModel } from "@/lib/visionAi";
+import { prepareInstructions, prepareInstructionsMeeting } from "@/lib/utils";
 
-const summarizer = createAgent({
-  name: "summarizer",
-  system:
-    `You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
-
-Use the following markdown structure for every output:
-
-### Overview
-Provide a detailed, engaging summary of the session's content. Focus on major features, user workflows, and any key takeaways. Write in a narrative style, using full sentences. Highlight unique or powerful aspects of the product, platform, or discussion.
-
-### Notes
-Break down key content into thematic sections with timestamp ranges. Each section should summarize key points, actions, or demos in bullet format.
-
-Example:
-#### Section Name
-- Main point or demo shown here
-- Another key insight or interaction
-- Follow-up tool or explanation provided
-
-#### Next Section
-- Feature X automatically does Y
-- Mention of integration with Z`.trim(),
-  model: gemini({
-    model: "gemini-1.5-flash",
-    apiKey: process.env.GEMINI_API_KEY,
-  }),
-});
 export const meetingsProcessing = inngest.createFunction(
   { id: "meetings/processing" },
   { event: "meetings/processing" },
   async ({ event, step }) => {
-    const response = await step.run("fetch-transcript", async () => {
-      return fetch(event.data.transcriptUrl).then((res) => res.text());
-    });
-
-    const transcript = await step.run("parse-transcript", async () => {
-      return JSONL.parse<StreamTranscriptItem>(response);
-    });
-
-    const transcriptWithSpeaker = await step.run("add-speakers", async () => {
-      const speakerIds = [
-        ...new Set(transcript.map((item) => item.speaker_id)),
-      ];
-      const userSpeaker = await db
-        .select()
-        .from(user)
-        .where(inArray(user.id, speakerIds))
-        .then((users) => users.map((user) => ({ ...user })));
-      const agentsSpeaker = await db
-        .select()
-        .from(agents)
-        .where(inArray(agents.id, speakerIds))
-        .then((agents) => agents.map((agent) => ({ ...agent })));
-
-      const speakers = [...userSpeaker, ...agentsSpeaker];
-
-      return transcript.map((items) => {
-        const speaker = speakers.find(
-          (speaker) => speaker.id === items.speaker_id
-        );
-
-        if (!speaker) {
-          return { ...items, user: { name: "unknow" } };
-        }
-
-        return { ...items, user: { name: speaker.name } };
-      });
-    });
-    const { output } = await summarizer.run(
-      "Summarize the following transcript:" +
-        JSON.stringify(transcriptWithSpeaker)
-    );
-
-    await step.run("save-summary", async () => {
+    await step.run("update-processing-db", async () => {
       await db
         .update(meetings)
-        .set({
-          summary: (output[0] as TextMessage).content as string,
-          status: "completed",
-        })
+        .set({ status: "processing" })
         .where(eq(meetings.id, event.data.meetingId));
     });
+
+    await step.sleep("wait-for-db-sync", "10s");
+
+    // Run summary and transcription correction in parallel
+    const [summary, correctedTranscriptionJsonString] = await Promise.all([
+      step.run("get-meeting-summary", async () => {
+        const filePart = {
+          fileData: {
+            fileUri: event.data.recordingUrl,
+            mimeType: "video/mp4",
+          },
+        };
+        const textPart = {
+          text: prepareInstructionsMeeting(event.data.transcription),
+        };
+        const request = {
+          contents: [{ role: "user", parts: [textPart, filePart] }],
+        };
+        const streamingResult =
+          await generativeVisionModel.generateContentStream(request);
+        const aggregatedResponse = await streamingResult.response;
+        return aggregatedResponse.candidates?.at(0)?.content.parts[0].text;
+      }),
+      step.run("update-transcription", async () => {
+        const rawTranscriptionText = event.data.transcription;
+        const prompt = `
+          You are an expert transcription correction service. Your task is to take a raw transcript and a meeting audio file, and produce a clean, accurate JSON representation of the transcript.
+          **Instructions:**
+          1.  **Correct Inaccuracies:** Listen to the audio and correct any words in the raw transcript that do not match what was said.
+          2.  **Fill Gaps:** Add any missing words or sentences.
+          3.  **Remove Fillers:** Remove conversational filler words (e.g., 'um', 'uh', 'like') and stutters.
+          4.  **Format Correctly:** Punctuate the text properly with periods, commas, and question marks.
+          5.  **Final Output:** The final output MUST be a valid JSON array. Each object in the array should represent a single line of dialogue and have the structure: {"speaker": "string", "text": "string","time":"00:04"}.speaker must be between user oe agent only. Do not include any other text, explanations, or markdown formatting like \`\`\`json.
+          Here is the raw transcription to correct:
+          \`\`\`
+          ${rawTranscriptionText}
+          \`\`\`
+        `.trim();
+        const filePart = {
+          fileData: {
+            fileUri: event.data.recordingUrl,
+            mimeType: "video/mp4",
+          },
+        };
+        const textPart = { text: prompt };
+        const request = {
+          contents: [{ role: "user", parts: [textPart, filePart] }],
+        };
+        const streamingResult =
+          await generativeVisionModel.generateContentStream(request);
+        const aggregatedResponse = await streamingResult.response;
+        return aggregatedResponse.candidates?.at(0)?.content.parts[0].text;
+      }),
+    ]);
+
+    // Save both results in a single step
+    await step.run("save-results", async () => {
+      if (!summary || !correctedTranscriptionJsonString) {
+        await db
+          .update(meetings)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(eq(meetings.id, event.data.meetingId));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to get a valid response from AI for all tasks.",
+        });
+      }
+
+      try {
+        // Clean the AI response by removing markdown code blocks
+        let cleanedJsonString = correctedTranscriptionJsonString;
+        if (cleanedJsonString.includes("```json")) {
+          cleanedJsonString = cleanedJsonString
+            .replace(/```json\s*/g, "")
+            .replace(/```\s*/g, "")
+            .trim();
+        } else if (cleanedJsonString.includes("```")) {
+          cleanedJsonString = cleanedJsonString.replace(/```\s*/g, "").trim();
+        }
+
+        // Parse the cleaned transcription string into a JSON object
+        const transcriptJson = JSON.parse(cleanedJsonString);
+
+        // Save both the summary and the parsed JSON transcript
+        await db
+          .update(meetings)
+          .set({
+            summary: summary,
+            transcrible: transcriptJson, // Assumes 'transcript' column is jsonb
+            status: "completed",
+            updatedAt: new Date(),
+          })
+          .where(eq(meetings.id, event.data.meetingId));
+
+        console.log(
+          "Successfully saved summary and corrected transcript to database"
+        );
+      } catch (parseError) {
+        console.error("Failed to parse AI transcription response:", parseError);
+        await db
+          .update(meetings)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(eq(meetings.id, event.data.meetingId));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to parse AI transcription response as JSON.",
+        });
+      }
+    });
+
+    return { success: true };
   }
 );
-
-export const AIResponseFormat = `
-      interface Feedback {
-      overallScore: number; //max 100
-      ATS: {
-        score: number; //rate based on ATS suitability
-        tips: {
-          type: "good" | "improve";
-          tip: string; //give 3-4 tips
-        }[];
-      };
-      toneAndStyle: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      content: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      structure: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      skills: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-    }`;
-
-export const prepareInstructions = ({
-  jobTitle,
-  jobDescription,
-}: {
-  jobTitle: unknown;
-  jobDescription: unknown;
-}) =>
-  `You are an expert in ATS (Applicant Tracking System) and resume analysis.
-      Please analyze and rate this resume and suggest how to improve it.
-      The rating can be low if the resume is bad.
-      Be thorough and detailed. Don't be afraid to point out any mistakes or areas for improvement.
-      If there is a lot to improve, don't hesitate to give low scores. This is to help the user to improve their resume.
-      If available, use the job description for the job user is applying to to give more detailed feedback.
-      If provided, take the job description into consideration.
-      The job title is: ${jobTitle}
-      The job description is: ${jobDescription}
-      Provide the feedback using the following format:
-      ${AIResponseFormat}
-      Return the analysis as an JSON object, without any other text and without the backticks.
-      Do not include any other text or comments.`;
 
 export const resumeProcessingGoggleAi = inngest.createFunction(
   { id: "resume/analysis" },
@@ -195,14 +166,14 @@ export const resumeProcessingGoggleAi = inngest.createFunction(
         text: prepareInstructions({
           jobTitle: event.data.jobTitle,
           jobDescription: event.data.jobDescription,
+          companyName: event.data.companyName,
         }),
       };
       const request = {
         contents: [{ role: "user", parts: [textPart, filePart] }],
       };
-      const streamingResult = await generativeVisionModel.generateContentStream(
-        request
-      );
+      const streamingResult =
+        await generativeVisionModel.generateContentStream(request);
 
       const aggregatedResponse = await streamingResult.response;
       console.log(aggregatedResponse.candidates?.at(0)?.content.parts[0].text);

@@ -15,6 +15,7 @@ import { UpcomingState } from "@/app/modules/dashboard/ui/components/upcoming-st
 import { ActiveState } from "@/app/modules/dashboard/ui/components/active-state";
 import { CancelledState } from "@/app/modules/dashboard/ui/components/cancelled-state";
 import { ProcessingState } from "@/app/modules/dashboard/ui/components/processing-state";
+import { CompletedState } from "../components/completed-state";
 
 interface Props {
   meetingId: string;
@@ -30,9 +31,11 @@ export const MeetingIdView = ({ meetingId }: Props) => {
     "the following action will remove this meeting"
   );
 
-  const { data } = useSuspenseQuery(
-    trpc.meetings.getOne.queryOptions({ id: meetingId })
-  );
+  const { data } = useSuspenseQuery({
+    ...trpc.meetings.getOne.queryOptions({ id: meetingId }),
+    refetchInterval: (query) =>
+      query.state.data?.status === "processing" ? 20000 : false,
+  });
   const removeMeeting = useMutation(
     trpc.meetings.remove.mutationOptions({
       onSuccess: async () => {
@@ -83,7 +86,7 @@ export const MeetingIdView = ({ meetingId }: Props) => {
             isCancelling={false}
           />
         )}
-        {/* {isCompleted && <CompletedState data={data} />} */}
+        {isCompleted && <CompletedState data={data} />}
         {isProcessing && <ProcessingState />}
         {isActive && <ActiveState meetingId={meetingId} />}
       </div>

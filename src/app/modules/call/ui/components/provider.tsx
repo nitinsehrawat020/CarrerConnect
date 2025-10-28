@@ -6,15 +6,18 @@ import { RoomContext } from "@livekit/components-react";
 import { toastAlert } from "./alert-toast";
 import useConnectionDetails from "@/hooks/useConnectionDetails";
 import { AppConfig } from "@/lib/types";
+import { meetingGetOne } from "@/app/modules/meetings/types";
 
 export function Provider({
   appConfig,
+  meetingData,
   children,
 }: {
   appConfig: AppConfig;
   children: React.ReactNode;
+  meetingData: meetingGetOne;
 }) {
-  const { connectionDetails } = useConnectionDetails(appConfig);
+  const { connectionDetails } = useConnectionDetails(appConfig, meetingData);
   const room = React.useMemo(() => new Room(), []);
 
   React.useEffect(() => {

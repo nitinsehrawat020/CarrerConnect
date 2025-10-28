@@ -1,10 +1,129 @@
 import { NextRequest, NextResponse } from "next/server";
-import { WebhookReceiver, WebhookEvent } from "livekit-server-sdk";
+import {
+  WebhookReceiver,
+  WebhookEvent,
+  EgressClient,
+  RoomServiceClient,
+} from "livekit-server-sdk";
+import { GCPUpload, EncodedFileOutput } from "@livekit/protocol";
+import { Storage } from "@google-cloud/storage";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
-import { inngest } from "@/inngest/client";
+// import { inngest } from "@/inngest/client";
+
+// Initialize EgressClient for recording
+const egressClient = new EgressClient(
+  process.env.LIVEKIT_URL!,
+  process.env.LIVEKIT_API_KEY!,
+  process.env.LIVEKIT_API_SECRET!
+);
+
+// Initialize RoomServiceClient for room management
+const roomClient = new RoomServiceClient(
+  process.env.LIVEKIT_URL!,
+  process.env.LIVEKIT_API_KEY!,
+  process.env.LIVEKIT_API_SECRET!
+);
+
+// Lazily initialized Google Cloud Storage client
+let storageClient: Storage | null = null;
+
+function getStorageClient(): Storage | null {
+  if (storageClient) return storageClient;
+
+  const credentialsJson = process.env.GCS_CREDENTIALS_JSON;
+  if (!credentialsJson) {
+    console.warn("GCS_CREDENTIALS_JSON not configured; signed URLs disabled");
+    return null;
+  }
+
+  try {
+    const credentials = JSON.parse(credentialsJson);
+    storageClient = new Storage({
+      projectId: credentials.project_id,
+      credentials,
+    });
+    return storageClient;
+  } catch (error) {
+    console.error("Failed to parse GCS_CREDENTIALS_JSON:", error);
+    return null;
+  }
+}
+
+async function generateSignedRecordingUrl(recordingPath: string | null) {
+  if (!recordingPath) return null;
+
+  const storage = getStorageClient();
+  const bucket = process.env.GCS_BUCKET;
+
+  if (!storage || !bucket) {
+    console.warn("Missing GCS configuration; cannot generate signed URL");
+    return null;
+  }
+
+  let objectPath = recordingPath;
+
+  if (recordingPath.startsWith("gs://")) {
+    const withoutProtocol = recordingPath.slice(5);
+    const firstSlash = withoutProtocol.indexOf("/");
+    objectPath = firstSlash === -1 ? "" : withoutProtocol.slice(firstSlash + 1);
+  } else if (recordingPath.startsWith("http")) {
+    try {
+      const url = new URL(recordingPath);
+      const decoded = decodeURIComponent(url.pathname);
+      if (decoded.includes("/o/")) {
+        objectPath = decoded.split("/o/").pop() ?? "";
+      } else {
+        objectPath = decoded.replace(/^\//, "");
+      }
+    } catch (error) {
+      console.warn("Failed to parse recording URL for signed URL generation", {
+        recordingPath,
+        error,
+      });
+      return null;
+    }
+  } else if (recordingPath.startsWith(`${bucket}/`)) {
+    objectPath = recordingPath.slice(bucket.length + 1);
+  }
+
+  if (!objectPath) {
+    console.warn("Unable to derive object path for recording", {
+      recordingPath,
+    });
+    return null;
+  }
+
+  const file = storage.bucket(bucket).file(objectPath);
+
+  try {
+    const [exists] = await file.exists();
+    if (!exists) {
+      console.warn("Recording file does not exist in GCS", {
+        bucket,
+        objectPath,
+      });
+      return null;
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return signedUrl;
+  } catch (error) {
+    console.error("Failed to generate signed URL for recording", {
+      bucket,
+      objectPath,
+      error,
+    });
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,13 +140,11 @@ export async function POST(req: NextRequest) {
     // Verify and parse the webhook event
     const event: WebhookEvent = await receiver.receive(body, authHeader);
 
-    console.log("LiveKit webhook event received:", event.event);
-
     // Handle different LiveKit events
     switch (event.event) {
-      case "room_started":
-        await handleRoomStarted(event);
-        break;
+      // case "room_started":
+      //   await handleRoomStarted(event);
+      //   break;
 
       case "room_finished":
         await handleRoomFinished(event);
@@ -41,13 +158,13 @@ export async function POST(req: NextRequest) {
         await handleParticipantLeft(event);
         break;
 
-      case "track_published":
-        await handleTrackPublished(event);
-        break;
+      // case "track_published":
+      //   await handleTrackPublished(event);
+      //   break;
 
-      case "track_unpublished":
-        await handleTrackUnpublished(event);
-        break;
+      // case "track_unpublished":
+      //   await handleTrackUnpublished(event);
+      //   break;
 
       case "egress_started":
         await handleEgressStarted(event);
@@ -79,85 +196,227 @@ export async function POST(req: NextRequest) {
 }
 
 // Event handlers
-async function handleRoomStarted(event: WebhookEvent) {
-  console.log(`Room started: ${event.room?.name}`);
-}
+// async function handleRoomStarted(event: WebhookEvent) {}
 
 async function handleRoomFinished(event: WebhookEvent) {
-  console.log(`Room finished: ${event.room?.name}`);
+  const roomName = event.room?.name;
+  if (!roomName) {
+    console.log("No room name in room_finished event");
+    return;
+  }
+
+  try {
+    // Get the egress ID for this room
+    const [meeting] = await db
+      .select({ egressId: meetings.egressId })
+      .from(meetings)
+      .where(eq(meetings.id, roomName));
+
+    if (!meeting?.egressId) {
+      console.log(`No active recording found for room: ${roomName}`);
+      return;
+    }
+
+    // Update meeting status
+    await db
+      .update(meetings)
+      .set({
+        endedAt: new Date(),
+        status: "processing",
+        egressId: null,
+      })
+      .where(eq(meetings.id, roomName));
+  } catch (error) {
+    console.error("Failed to stop recording:", error);
+  }
 }
 
 async function handleParticipantJoined(event: WebhookEvent) {
-  console.log(event.participant?.identity);
+  const roomName = event.room?.name;
+  const participant = event.participant;
+
+  if (!roomName || !participant) {
+    console.log(
+      "Missing room name or participant info in participant_joined event"
+    );
+    return;
+  }
+
+  // Skip if this is an agent (LiveKit agents typically have specific identity patterns)
+  // Agents usually have identity like "agent-*" or specific metadata
+  if (
+    participant.identity?.startsWith("agent-") ||
+    participant.identity?.includes("agent")
+  ) {
+    return;
+  }
+
+  // Check if recording is already started for this room
+  const [existingMeeting] = await db
+    .select({
+      egressId: meetings.egressId,
+      userId: meetings.userId,
+      meetingId: meetings.id,
+    })
+    .from(meetings)
+    .where(eq(meetings.id, roomName));
+
+  if (existingMeeting?.egressId) {
+    console.log(`Recording already active for room: ${roomName}`);
+    return;
+  }
+
+  // Check if we have GCS configuration
+  const bucket = process.env.GCS_BUCKET;
+  const credentialsJson = process.env.GCS_CREDENTIALS_JSON;
+
+  if (!bucket || !credentialsJson) {
+    console.warn(
+      "GCS configuration missing. Set GCS_BUCKET and GCS_CREDENTIALS_JSON to enable recording."
+    );
+    return;
+  }
+
+  try {
+    const prefix = process.env.GCS_OUTPUT_PREFIX || "recordings";
+
+    const path = `${prefix}/${existingMeeting.userId}/${roomName}`;
+
+    // Create GCP upload configuration
+    const gcpUpload = new GCPUpload({
+      bucket: bucket,
+      credentials: credentialsJson,
+    });
+
+    // Create encoded file output
+    const fileOutput = new EncodedFileOutput({
+      fileType: 1, // MP4
+      filepath: `${path}.mp4`,
+      output: { case: "gcp", value: gcpUpload },
+    });
+
+    // Start room composite egress to GCS
+    const egressInfo = await egressClient.startRoomCompositeEgress(
+      roomName,
+      fileOutput,
+      "grid"
+    );
+
+    // Store egress ID in database for this meeting
+    await db
+      .update(meetings)
+      .set({
+        egressId: egressInfo.egressId,
+        status: "active",
+        startedAt: new Date(),
+      })
+      .where(eq(meetings.id, roomName));
+  } catch (error) {
+    console.error("Failed to start recording:", error);
+  }
 }
 
-async function handleParticipantLeft(event: WebhookEvent) {}
+async function handleParticipantLeft(event: WebhookEvent) {
+  const roomName = event.room?.name;
+  const participant = event.participant;
 
-async function handleTrackPublished(event: WebhookEvent) {
-  console.log(
-    `Track published: ${event.track?.type} by ${event.participant?.identity}`
-  );
+  if (!roomName || !participant) {
+    console.log(
+      "Missing room name or participant info in participant_left event"
+    );
+    return;
+  }
+
+  // Skip if this is an agent leaving
+  if (
+    participant.identity?.startsWith("agent-") ||
+    participant.identity?.includes("agent")
+  ) {
+    return;
+  }
+
+  // For most use cases, when a human participant leaves, we want to end the meeting immediately
+  // This avoids race conditions and API errors when checking remaining participants
+  try {
+    // Try to delete the room, which will trigger room_finished event and stop recording
+    await roomClient.deleteRoom(roomName);
+  } catch (error) {
+    // Handle common error cases gracefully
+    const errorObj = error as { code?: string; status?: number };
+    if (errorObj?.code === "not_found" || errorObj?.status === 404) {
+    } else {
+      console.error(`Failed to delete room ${roomName}:`, error);
+    }
+
+    // Even if room deletion fails, we should still stop the recording
+    try {
+    } catch (dbError) {
+      console.error(
+        `Failed to manually stop recording for room ${roomName}:`,
+        dbError
+      );
+    }
+  }
 }
 
-async function handleTrackUnpublished(event: WebhookEvent) {
-  console.log(
-    `Track unpublished: ${event.track?.type} by ${event.participant?.identity}`
-  );
+// async function handleTrackPublished(_event: WebhookEvent) {
+//   // Handle track published event if needed
+//   // Example: Log when audio/video tracks are published
+// }
 
-  // Handle track unpublishing
-}
+// async function handleTrackUnpublished(_event: WebhookEvent) {
+//   // Handle track unpublished event if needed
+//   // Example: Log when audio/video tracks are unpublished
+// }
 
 async function handleEgressStarted(event: WebhookEvent) {
-  console.log(`Egress started for room: ${event.room?.name}`);
+  const egressId = event.egressInfo?.egressId;
+  const roomName = event.egressInfo?.roomName;
 
-  // Handle recording/streaming start
-  if (event.room && event.egressInfo) {
-    await inngest.send({
-      name: "livekit/egress.started",
-      data: {
-        roomName: event.room.name,
-        egressId: event.egressInfo.egressId,
-        egressType:
-          typeof event.egressInfo.details === "string"
-            ? event.egressInfo.details
-            : "unknown",
-        startedAt: new Date(),
-      },
-    });
+  if (!egressId || !roomName) {
+    console.log("Missing egress info in egress_started event");
+    return;
   }
 }
 
 async function handleEgressEnded(event: WebhookEvent) {
-  console.log(`Egress ended for room: ${event.room?.name}`);
+  const egressId = event.egressInfo?.egressId;
+  const roomName = event.egressInfo?.roomName;
+  const fileResults = event.egressInfo?.fileResults;
 
-  // Handle recording/streaming completion
-  if (event.room && event.egressInfo) {
-    const meetingId = event.room.name; // Adjust based on your room naming convention
+  if (!egressId || !roomName) {
+    console.log("Missing egress info in egress_ended event");
+    return;
+  }
 
-    // If this was a recording and has file results, update the meeting with the recording URL
-    if (event.egressInfo.fileResults?.[0]) {
-      await db
-        .update(meetings)
-        .set({
-          recordingUrl: event.egressInfo.fileResults[0].location,
-        })
-        .where(eq(meetings.id, meetingId));
+  // Extract the recording URL from file results
+  let recordingUrl: string | null = null;
+  let signedUrl: string | null = null;
+
+  if (fileResults && fileResults.length > 0) {
+    recordingUrl = fileResults[0].location || fileResults[0].filename;
+
+    if (!recordingUrl) {
+      console.warn("Egress ended without a recording location", {
+        roomName,
+        egressId,
+      });
+    } else {
+      signedUrl = await generateSignedRecordingUrl(recordingUrl);
     }
+  }
 
-    await inngest.send({
-      name: "livekit/egress.ended",
-      data: {
-        roomName: event.room.name,
-        meetingId: meetingId,
-        egressId: event.egressInfo.egressId,
-        egressType:
-          typeof event.egressInfo.details === "string"
-            ? event.egressInfo.details
-            : "unknown",
-        fileLocation: event.egressInfo.fileResults?.[0]?.location,
-        status: event.egressInfo.status,
+  try {
+    // Update the meeting with recording URL and final status
+    await db
+      .update(meetings)
+      .set({
+        recordingUrl: signedUrl ?? recordingUrl,
         endedAt: new Date(),
-      },
-    });
+        status: "processing",
+      })
+      .where(eq(meetings.id, roomName));
+  } catch (error) {
+    console.error("Failed to update meeting with recording URL:", error);
   }
 }

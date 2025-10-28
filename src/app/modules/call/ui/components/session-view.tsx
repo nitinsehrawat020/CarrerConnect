@@ -63,20 +63,7 @@ export const SessionView = ({
 
           toastAlert({
             title: "Session ended",
-            description: (
-              <p className="w-full">
-                {reason}
-                <a
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  href="https://docs.livekit.io/agents/start/voice-ai/"
-                  className="whitespace-nowrap underline"
-                >
-                  See quickstart guide
-                </a>
-                .
-              </p>
-            ),
+            description: <p className="w-full">{reason}</p>,
           });
           room.disconnect();
         }
@@ -99,45 +86,66 @@ export const SessionView = ({
       ref={ref}
       inert={disabled}
       className={cn(
-        "opacity-0 bg-amber-300",
-        // prevent page scrollbar
-        // when !chatOpen due to 'translate-y-20'
-        !chatOpen && "max-h-svh overflow-hidden"
+        "relative min-h-screen overflow-hidden bg-[radial-gradient(130%_110%_at_50%_-10%,var(--tw-gradient-stops))] from-sidebar-accent via-sidebar/90 to-sidebar",
+        "transition-opacity"
       )}
     >
-      <ChatMessageView
+      <div
         className={cn(
-          "mx-auto min-h-svh w-full max-w-2xl px-3 pt-32 pb-40 transition-[opacity,translate] duration-300 ease-out md:px-0 md:pt-36 md:pb-48",
-          chatOpen
-            ? "translate-y-0 opacity-100 delay-200"
-            : "translate-y-20 opacity-0"
+          "min-h-screen transition-[margin] duration-300 ease-out",
+          chatOpen ? "pr-96" : "pr-0"
         )}
       >
-        <div className="space-y-3 whitespace-pre-wrap">
-          <AnimatePresence>
-            {messages.map((message: ReceivedChatMessage) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 1, height: "auto", translateY: 0.001 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-              >
-                <ChatEntry hideName key={message.id} entry={message} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </ChatMessageView>
+        <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-36 pt-20 md:px-10 lg:px-12">
+          <header className="mb-8 flex items-center justify-between">
+            <div>
+              <p className="text-2xl font-medium text-primary">Live Session</p>
+              <h1 className="text-2xl font-semibold text-white md:text-3xl">
+                Agent &amp; Participant
+              </h1>
+            </div>
+          </header>
 
-      <div className="bg-background mp-12 fixed top-0 right-0 left-0 h-32 md:h-36">
-        {/* skrim */}
-        <div className="from-background absolute bottom-0 left-0 h-12 w-full translate-y-full bg-gradient-to-b to-transparent" />
+          <div className="flex-1">
+            <MediaTiles chatOpen={chatOpen} />
+          </div>
+        </div>
       </div>
 
-      <MediaTiles chatOpen={chatOpen} />
+      <aside
+        className={cn(
+          "fixed top-0 right-0 bottom-0 z-60 w-96 border-l border-border/80 bg-card/90 backdrop-blur transition-transform duration-300 ease-out ",
+          chatOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        <ChatMessageView className="flex h-full flex-col">
+          <div className="border-b border-border/70 px-5 py-4">
+            <h2 className="text-lg font-semibold text-foreground">Chat</h2>
+            <p className="text-sm text-muted-foreground">
+              Message your AI assistant in real time.
+            </p>
+          </div>
+          <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            <AnimatePresence>
+              {messages.map((message: ReceivedChatMessage) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                >
+                  <ChatEntry hideName entry={message} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </ChatMessageView>
+      </aside>
 
-      <div className="bg-background fixed right-0 bottom-0 left-0 z-50 px-3 pt-2 pb-3 md:px-12 md:pb-12">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 h-32 bg-gradient-to-b from-sidebar/90 via-sidebar/60 to-transparent" />
+
+      <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-sidebar/95 via-sidebar/80 to-sidebar/40 px-3 pt-2 pb-3 backdrop-blur md:px-12 md:pb-12">
         <motion.div
           key="control-bar"
           initial={{ opacity: 0, translateY: "100%" }}
@@ -151,7 +159,7 @@ export const SessionView = ({
             ease: "easeOut",
           }}
         >
-          <div className="relative z-10 mx-auto w-full max-w-2xl">
+          <div className="relative z-10 mx-auto w-full max-w-3xl">
             {appConfig.isPreConnectBufferEnabled && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -183,8 +191,6 @@ export const SessionView = ({
               onSendMessage={handleSendMessage}
             />
           </div>
-          {/* skrim */}
-          <div className="from-background border-background absolute top-0 left-0 h-12 w-full -translate-y-full bg-gradient-to-t to-transparent" />
         </motion.div>
       </div>
     </section>

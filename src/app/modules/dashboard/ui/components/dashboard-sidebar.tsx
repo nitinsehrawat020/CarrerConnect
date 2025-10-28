@@ -21,8 +21,8 @@ import DashbroadUserButton from "./dashbroad-user-button";
 import { DashboardTrail } from "./dashboard-trail";
 
 const firstSection = [
-  { icon: VideoIcon, label: "Meetings", href: "/meetings" },
   { icon: BotIcon, label: "Agents", href: "/agents" },
+  { icon: VideoIcon, label: "Meetings", href: "/meetings" },
   { icon: FileUser, label: "Resume Analysis", href: "/resumeAnalysis" },
 ];
 const secondSection = [{ icon: StarIcon, label: "Upgrade", href: "/upgrade" }];

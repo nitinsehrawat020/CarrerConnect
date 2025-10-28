@@ -1,0 +1,9 @@
+api_key: devkeylocal
+api_secret: 7c1f4c2f5a9c48d6a1b2e3f4c5d6e7f8
+ws_url: ws://livekit:7880
+log_level: info
+redis:
+  address: redis:6379
+  username: ""
+  password: ""
+  db: 0

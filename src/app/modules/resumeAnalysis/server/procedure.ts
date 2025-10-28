@@ -5,7 +5,14 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import z from "zod";
 import { serverCreateSchema } from "../schema";
-import { put } from "@vercel/blob";
+import { Storage } from "@google-cloud/storage";
+
+interface GCSCredentials {
+  project_id?: string;
+  client_email?: string;
+  private_key?: string;
+  [key: string]: unknown;
+}
 import { inngest } from "@/inngest/client";
 
 function extractPdfBase64(input: z.infer<typeof serverCreateSchema>["file"]) {
@@ -27,38 +34,89 @@ function extractImageBase64(
   return input.base64;
 }
 
-async function uploadToVercelBlob(buffer: Buffer, filename: string) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
+// --- Google Cloud Storage helpers ---
+let gcs: Storage | null = null;
+
+function getGCS() {
+  if (gcs) return gcs;
+  const raw = process.env.GCS_CREDENTIALS_JSON;
+  if (!raw) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: "Missing BLOB_READ_WRITE_TOKEN env for blob uploads",
+      message:
+        "Missing GCS_CREDENTIALS_JSON env; required for Google Cloud Storage uploads",
     });
   }
-  const { url } = await put(filename, buffer, {
-    access: "public",
-    token,
-    contentType: "application/pdf",
+  let creds: GCSCredentials;
+  try {
+    creds = JSON.parse(raw) as GCSCredentials;
+  } catch {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Invalid GCS_CREDENTIALS_JSON; must be valid JSON",
+    });
+  }
+  gcs = new Storage({
+    credentials: creds,
+    projectId: creds.project_id,
   });
-  return url;
+  return gcs;
+}
+
+function getBucket() {
+  const bucketName = process.env.GCS_BUCKET;
+  if (!bucketName) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message:
+        "Missing GCS_BUCKET env; required for Google Cloud Storage uploads",
+    });
+  }
+  return getGCS().bucket(bucketName);
+}
+
+async function uploadToGCS(
+  buffer: Buffer,
+  filename: string,
+  contentType: string
+) {
+  const bucket = getBucket();
+  const file = bucket.file(filename);
+  await file.save(buffer, {
+    resumable: false,
+    contentType,
+    metadata: { contentType },
+  });
+  // UBLA buckets don't allow per-object ACL changes (makePublic).
+  // Default: return a time-limited signed URL; optionally return a public URL
+  // if you've configured bucket-level public access via IAM.
+  const usePublicRead = process.env.GCS_PUBLIC_READ === "true";
+  if (usePublicRead) {
+    // Assumes bucket IAM grants roles/storage.objectViewer to allUsers.
+    return `https://storage.googleapis.com/${bucket.name}/${filename}`;
+  }
+
+  // Generate a signed URL (v4). Max 7 days per GCS constraints.
+  const ttlSecRaw = Number(process.env.GCS_SIGNED_URL_TTL_SECONDS ?? 604800);
+  const ttlSec = Math.min(Math.max(ttlSecRaw, 60), 604800); // clamp between 1min and 7d
+  const expires = Date.now() + ttlSec * 1000;
+  const [signedUrl] = await file.getSignedUrl({
+    action: "read",
+    version: "v4",
+    expires,
+  });
+  return signedUrl;
+}
+
+// Keep function names to avoid call-site changes
+async function uploadToVercelBlob(buffer: Buffer, filename: string) {
+  // Upload PDF to GCS instead of Vercel Blob
+  return uploadToGCS(buffer, filename, "application/pdf");
 }
 
 async function uploadImageToBlob(buffer: Buffer, filename: string) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-
-  if (!token) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Missing BLOB_READ_WRITE_TOKEN env for blob uploads",
-    });
-  }
-
-  const { url } = await put(filename, buffer, {
-    access: "public",
-    token,
-    contentType: "image/png",
-  });
-  return url;
+  // Upload PNG to GCS instead of Vercel Blob
+  return uploadToGCS(buffer, filename, "image/png");
 }
 
 export const resumeRouter = createTRPCRouter({
@@ -100,7 +158,6 @@ export const resumeRouter = createTRPCRouter({
           imageUrl = await uploadImageToBlob(imageBuffer, imageFileName);
         }
       }
-      console.log(imageUrl);
 
       // Save to database
       const createdResumeArray = await db
@@ -125,6 +182,7 @@ export const resumeRouter = createTRPCRouter({
           image: imageUrl,
           jobTitle: input.jobTitle,
           jobDescription: input.jobDescription,
+          companyName: input.companyName,
         },
       });
       return createdResume;

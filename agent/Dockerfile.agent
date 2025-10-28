@@ -1,0 +1,31 @@
+FROM node:20-slim
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Install system dependencies required by some native modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    build-essential \
+    python3 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy only package manifests for better layer caching
+COPY package.json package-lock.json* ./
+
+RUN npm ci || npm install
+
+# Install tsx globally to simplify runtime
+RUN npm install -g tsx
+
+# Copy the agent source
+COPY agent/ ./agent/
+
+# Environment
+ENV NODE_ENV=production
+
+# Default working dir for runtime inside agent folder
+WORKDIR /usr/src/app/agent
+
+# Run the TypeScript agent with tsx and start the worker
+CMD ["tsx", "agent.ts", "start"]

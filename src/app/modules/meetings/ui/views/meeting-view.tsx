@@ -13,9 +13,13 @@ const MeetingView = () => {
   const trpc = useTRPC();
   const router = useRouter();
   const [filters, setFilters] = useMeetingsFilter();
-  const { data } = useSuspenseQuery(
-    trpc.meetings.getMany.queryOptions({ ...filters })
-  );
+  const { data } = useSuspenseQuery({
+    ...trpc.meetings.getMany.queryOptions({ ...filters }),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      return items.some((item) => item.status === "processing") ? 20000 : false;
+    },
+  });
 
   return (
     <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4">

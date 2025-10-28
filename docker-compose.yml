@@ -1,0 +1,45 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+
+  egress:
+    image: livekit/egress:latest
+    environment:
+      - EGRESS_CONFIG_FILE=/etc/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+    depends_on:
+      - livekit
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save '' --appendonly no
+    ports:
+      - "6379:6379"
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile.agent
+    environment:
+      # LiveKit connection
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      # App API for saving transcripts
+      - API_ENDPOINT=http://host.docker.internal:3000
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
+      # LLM key for Gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - livekit
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

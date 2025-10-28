@@ -4,7 +4,12 @@ import {
   type AccessTokenOptions,
   type VideoGrant,
 } from "livekit-server-sdk";
-import { RoomConfiguration } from "@livekit/protocol";
+import { RoomAgentDispatch, RoomConfiguration } from "@livekit/protocol";
+import { meetingGetOne, MeetingStatus } from "@/app/modules/meetings/types";
+import { meetings, user } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { TRPCError } from "@trpc/server";
 
 // NOTE: you are expected to define the following environment variables in `.env.local`:
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -35,17 +40,46 @@ export async function POST(req: Request) {
 
     // Parse agent configuration from request body
     const body = await req.json();
-    const agentName: string = body?.room_config?.agents?.[0]?.agent_name;
+    const meetingData: meetingGetOne | undefined = body?.meetingData;
+    if (!meetingData)
+      return new TRPCError({
+        code: "NOT_FOUND",
+        message: "issue in getting meetingData",
+      });
+
+    const [previousMeetingSummary] = await db
+      .select({ transcribe: meetings.transcrible })
+      .from(meetings)
+      .where(
+        and(
+          eq(meetings.agentId, meetingData.agentId),
+          eq(meetings.status, MeetingStatus.Complete),
+          eq(meetings.userId, meetingData.userId)
+        )
+      );
 
     // Generate participant token
-    const participantName = "user";
-    const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
+    const participantName = meetingData.user.name;
+    const participantIdentity = meetingData?.userId;
+    const roomName = meetingData?.id;
+
+    const instructions = meetingData.agent.instruction;
+
+    const metadata = JSON.stringify({
+      instructions,
+      context: {
+        careerField: meetingData.user.careerPath,
+        idealJob: meetingData.user.idealJob,
+        targetCompany: meetingData.user.targetCompany,
+        previousComapny: meetingData.user.previousJob,
+      },
+      pastSummary: previousMeetingSummary?.transcribe,
+    });
 
     const participantToken = await createParticipantToken(
       { identity: participantIdentity, name: participantName },
       roomName,
-      agentName
+      metadata
     );
 
     // Return connection details
@@ -70,12 +104,13 @@ export async function POST(req: Request) {
 function createParticipantToken(
   userInfo: AccessTokenOptions,
   roomName: string,
-  agentName?: string
+  agentMetadata?: string
 ): Promise<string> {
   const at = new AccessToken(API_KEY, API_SECRET, {
     ...userInfo,
     ttl: "15m",
   });
+
   const grant: VideoGrant = {
     room: roomName,
     roomJoin: true,
@@ -85,9 +120,23 @@ function createParticipantToken(
   };
   at.addGrant(grant);
 
-  if (agentName) {
+  // Attach agent dispatch and metadata if an agent name is provided
+  if (agentMetadata) {
     at.roomConfig = new RoomConfiguration({
-      agents: [{ agentName }],
+      metadata: agentMetadata,
+      agents: [
+        new RoomAgentDispatch({
+          metadata: agentMetadata,
+        }),
+      ],
+      departureTimeout: 180,
+      emptyTimeout: 5,
+    });
+  } else {
+    at.roomConfig = new RoomConfiguration({
+      metadata: agentMetadata,
+      agents: [new RoomAgentDispatch()],
+      emptyTimeout: 5,
     });
   }
 

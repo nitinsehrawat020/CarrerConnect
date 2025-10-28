@@ -46,7 +46,7 @@ const page = async ({ searchParams }: Props) => {
           <ErrorBoundary
             fallback={
               <ErrorState
-                title=" Erro Loading meetings"
+                title="Error Loading meetings"
                 description="Please try again later"
               />
             }

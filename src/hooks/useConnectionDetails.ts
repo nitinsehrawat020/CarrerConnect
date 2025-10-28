@@ -6,7 +6,10 @@ import { meetingGetOne } from "@/app/modules/meetings/types";
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000;
 
-export default function useConnectionDetails(appConfig: AppConfig) {
+export default function useConnectionDetails(
+  appConfig: AppConfig,
+  meetingData: meetingGetOne
+) {
   // Generate room connection details, including:
   //   - A random Room name
   //   - A random Participant name
@@ -36,11 +39,7 @@ export default function useConnectionDetails(appConfig: AppConfig) {
           "X-Sandbox-Id": appConfig.sandboxId ?? "",
         },
         body: JSON.stringify({
-          room_config: appConfig.agentName
-            ? {
-                agents: [{ agent_name: appConfig.agentName }],
-              }
-            : undefined,
+          meetingData: meetingData,
         }),
       });
       data = await res.json();
@@ -51,7 +50,7 @@ export default function useConnectionDetails(appConfig: AppConfig) {
 
     setConnectionDetails(data);
     return data;
-  }, []);
+  }, [meetingData, appConfig]);
 
   useEffect(() => {
     fetchConnectionDetails();

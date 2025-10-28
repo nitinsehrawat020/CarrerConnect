@@ -3,10 +3,7 @@
 import * as React from "react";
 import { useCallback } from "react";
 import { Track } from "livekit-client";
-import {
-  BarVisualizer,
-  useRemoteParticipants,
-} from "@livekit/components-react";
+import { BarVisualizer } from "@livekit/components-react";
 import {
   ChatTextIcon,
   PhoneDisconnectIcon,
@@ -51,12 +48,10 @@ export function AgentControlBar({
   onDeviceError,
   ...props
 }: AgentControlBarProps) {
-  const participants = useRemoteParticipants();
   const [chatOpen, setChatOpen] = React.useState(false);
   const [isSendingMessage, setIsSendingMessage] = React.useState(false);
 
-  const isAgentAvailable = participants.some((p) => p.isAgent);
-  const isInputDisabled = !chatOpen || !isAgentAvailable || isSendingMessage;
+  const isInputDisabled = isSendingMessage;
 
   const [isDisconnecting, setIsDisconnecting] = React.useState(false);
 
@@ -111,7 +106,7 @@ export function AgentControlBar({
     <div
       aria-label="Voice assistant controls"
       className={cn(
-        "bg-background border-bg2 dark:border-separator1 flex flex-col rounded-[31px] border p-3 drop-shadow-md/3",
+        "bg-card/70 border-bg2 dark:border-separator1 flex flex-col rounded-[31px] border p-3 drop-shadow-md/3",
         className
       )}
       {...props}
@@ -228,7 +223,6 @@ export function AgentControlBar({
               aria-label="Toggle chat"
               pressed={chatOpen}
               onPressedChange={setChatOpen}
-              disabled={!isAgentAvailable}
               className="aspect-square h-full"
             >
               <ChatTextIcon weight="bold" />

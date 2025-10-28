@@ -2,7 +2,12 @@
 import { useTRPC } from "@/trpc/client";
 import { meetingGetOne } from "../../types";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";
@@ -27,6 +32,7 @@ import { CommandSelect } from "@/components/command-select";
 import GeneratedAvatar from "@/components/generated-avatar";
 import NewAgentDialog from "@/app/modules/agents/ui/components/new-agent-dialog";
 import { useRouter } from "next/navigation";
+import UserDetailsDialog from "@/app/modules/profile/ui/components/user-details-dialog";
 
 interface MeetingFormProps {
   onSuccess?: (id?: string) => void;
@@ -43,8 +49,13 @@ const MeetingForm = ({
   const queryClient = useQueryClient();
   const [openNewAgentDialog, setOpenNewAgentDialog] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const router = useRouter();
+  const handleRemoveMeeting = () => {
+    setIsDialogOpen(true);
+  };
 
+  const { data: user } = useSuspenseQuery(trpc.user.getOne.queryOptions());
   const agents = useQuery(
     trpc.agents.getMany.queryOptions({ pageSize: 100, search: agentSearch })
   );
@@ -92,12 +103,12 @@ const MeetingForm = ({
       },
     })
   );
-
   const form = useForm<z.infer<typeof meetingInsertSchema>>({
     resolver: zodResolver(meetingInsertSchema),
     defaultValues: {
       name: initialValues?.name ?? "",
       agentId: initialValues?.agentId ?? "",
+      meetingAgenda: initialValues?.meetingAgenda ?? "",
     },
   });
 
@@ -111,10 +122,21 @@ const MeetingForm = ({
       createMeeting.mutate(values);
     }
   };
-  console.log(agents.data?.items);
+
+  const hasUserDetails = Boolean(
+    user?.idealJob &&
+      user?.careerPath &&
+      user?.previousJob &&
+      user?.targetCompany
+  );
 
   return (
     <>
+      <UserDetailsDialog
+        open={isDialogOpen}
+        onOpenChange={() => setIsDialogOpen((value) => !value)}
+        user={user}
+      />
       <NewAgentDialog
         open={openNewAgentDialog}
         onOpenChange={setOpenNewAgentDialog}
@@ -129,6 +151,22 @@ const MeetingForm = ({
                 <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input {...field} placeholder="e.g. React Helper" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            name="meetingAgenda"
+            control={form.control}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Meeting Agenda</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder="e.g.help me clearing an interview"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -153,6 +191,9 @@ const MeetingForm = ({
                             className="border size-6"
                           />
                           <span>{agent.name}</span>
+                          <span className="font-extralight text-[12px]">
+                            {agent.instruction}
+                          </span>
                         </div>
                       ),
                     }))}
@@ -191,10 +232,19 @@ const MeetingForm = ({
                 Cancel
               </Button>
             )}
-
-            <Button disabled={isPending} type="submit">
-              {isEdit ? "Update" : "Create"}
-            </Button>
+            {hasUserDetails ? (
+              <Button
+                disabled={isPending}
+                type="button"
+                onClick={handleRemoveMeeting}
+              >
+                {isEdit ? "Update" : "Create"}
+              </Button>
+            ) : (
+              <Button disabled={isPending} type="submit">
+                {isEdit ? "Update" : "Create"}
+              </Button>
+            )}
           </div>
         </form>
       </Form>

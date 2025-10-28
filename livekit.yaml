@@ -1,0 +1,18 @@
+port: 7880
+log_level: info
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: false
+redis:
+  address: redis:6379
+  username: ""
+  password: ""
+  db: 0
+keys:
+  devkeylocal: 7c1f4c2f5a9c48d6a1b2e3f4c5d6e7f8
+webhook:
+  api_key: devkeylocal
+  urls:
+    - https://fine-whippet-physically.ngrok-free.app/api/webhook

@@ -123,6 +123,19 @@ const AgentForm = ({ onSucces, onCancel, initialValues }: AgentFormProps) => {
           )}
         />
         <FormField
+          name="agentProfession"
+          control={form.control}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Agent Profession</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="e.g. Job recruiter" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
           name="instruction"
           control={form.control}
           render={({ field }) => (
@@ -131,7 +144,7 @@ const AgentForm = ({ onSucces, onCancel, initialValues }: AgentFormProps) => {
               <FormControl>
                 <Textarea
                   {...field}
-                  placeholder="eyou are an senior react developer that has 5 year of experience"
+                  placeholder="senior react developer with 5 year of experience"
                 />
               </FormControl>
               <FormMessage />

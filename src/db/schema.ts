@@ -7,7 +7,6 @@ import {
   pgEnum,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { max } from "drizzle-orm";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -17,10 +16,10 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
-  carrerPath: text("careerPath"),
+  careerPath: text("careerPath"),
   idealJob: text("idealJob"),
   previousJob: text("previousJob"),
-  targetCompany: text("targetCompany").array(),
+  targetCompany: text("targetCompany"),
   createdAt: timestamp("created_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),

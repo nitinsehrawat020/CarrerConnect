@@ -20,8 +20,8 @@ const vertexAI = new VertexAI({
     projectId: project,
   },
 });
-const textModel = "gemini-1.5-flash";
-const visionModel = "gemini-1.5-flash";
+const textModel = "gemini-2.5-flash";
+const visionModel = "gemini-2.5-flash";
 
 // Instantiate Gemini models
 export const generativeModel = vertexAI.getGenerativeModel({
@@ -34,7 +34,7 @@ export const generativeModel = vertexAI.getGenerativeModel({
       threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
     },
   ],
-  generationConfig: { maxOutputTokens: 256 },
+  generationConfig: { maxOutputTokens: 8192 },
   systemInstruction: {
     role: "system",
     parts: [{ text: `For example, you are a helpful customer service agent.` }],
@@ -44,7 +44,7 @@ export const generativeModel = vertexAI.getGenerativeModel({
 export const generativeVisionModel = vertexAI.getGenerativeModel({
   model: visionModel,
   generationConfig: {
-    maxOutputTokens: 2048,
+    maxOutputTokens: 8192,
     temperature: 0.1,
     candidateCount: 1,
     topP: 0.8,

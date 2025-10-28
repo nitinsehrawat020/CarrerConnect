@@ -15,7 +15,7 @@ import type { AppConfig } from "@/lib/types";
 import { toastAlert } from "../components/alert-toast";
 import { SessionView } from "../components/session-view";
 import { Welcome } from "../components/welcome";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { redirect } from "next/navigation";
 
@@ -29,16 +29,18 @@ interface AppProps {
 
 export const CallView = ({ appConfig, meetingId }: AppProps) => {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   const { data: meetingData } = useSuspenseQuery(
     trpc.meetings.getOne.queryOptions({ id: meetingId })
   );
-  console.log(meetingData);
 
   const room = useMemo(() => new Room(), []);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [videoEnabled, setVideoEnabled] = useState(true);
   const { refreshConnectionDetails, existingOrRefreshConnectionDetails } =
-    useConnectionDetails(appConfig);
+    useConnectionDetails(appConfig, meetingData);
 
   // Proactively warn if the page isn't in a secure context (required for mic/camera)
   useEffect(() => {
@@ -63,6 +65,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
       handleMeetingEnd();
     };
     const handleMeetingEnd = async () => {
+      queryClient.invalidateQueries(trpc.meetings.getMany.queryOptions({}));
       redirect("/meetings");
     };
     const onMediaDevicesError = (error: Error) => {
@@ -71,6 +74,7 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
         description: `${error.name}: ${error.message}`,
       });
     };
+
     room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
     room.on(RoomEvent.Disconnected, onDisconnected);
     return () => {
@@ -83,9 +87,10 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
     let aborted = false;
     if (sessionStarted && room.state === "disconnected") {
       Promise.all([
-        room.localParticipant.setMicrophoneEnabled(true, undefined, {
+        room.localParticipant.setMicrophoneEnabled(micEnabled, undefined, {
           preConnectBuffer: appConfig.isPreConnectBufferEnabled,
         }),
+        room.localParticipant.setCameraEnabled(videoEnabled),
         existingOrRefreshConnectionDetails().then((connectionDetails) =>
           room.connect(
             connectionDetails.serverUrl,
@@ -115,6 +120,8 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
   }, [
     room,
     sessionStarted,
+    micEnabled,
+    videoEnabled,
     appConfig.isPreConnectBufferEnabled,
     existingOrRefreshConnectionDetails,
   ]);
@@ -126,10 +133,15 @@ export const CallView = ({ appConfig, meetingId }: AppProps) => {
       <MotionWelcome
         key="welcome"
         startButtonText={startButtonText}
-        onStartCall={() => setSessionStarted(true)}
+        onStartCall={(micEnabled, videoEnabled) => {
+          setMicEnabled(micEnabled);
+          setVideoEnabled(videoEnabled);
+          setSessionStarted(true);
+        }}
         disabled={sessionStarted}
         initial={{ opacity: 1 }}
         animate={{ opacity: sessionStarted ? 0 : 1 }}
+        meetingId={meetingId}
         transition={{
           duration: 0.5,
           ease: "linear",
